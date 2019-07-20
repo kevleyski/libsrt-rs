@@ -1,0 +1,11 @@
+[package]
+name = "libsrt-sys"
+version = "0.1.0"
+authors = ["Byungwan Jun <unipro.kr@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+libc = "0.2"
+
+[build-dependencies]
+pkg-config = "0.3.7"
