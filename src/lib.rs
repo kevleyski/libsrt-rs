@@ -2,5 +2,5 @@ mod srt;
 
 extern crate libsrt_sys as inner;
 
-pub use self::srt::SrtStream;
-pub use self::srt::SrtListener;
+pub use self::srt::{SrtInStream, SrtOutStream};
+pub use self::srt::{SrtInListener, SrtOutListener};

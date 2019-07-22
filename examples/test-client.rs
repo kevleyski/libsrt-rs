@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 use failure::{self as f, Error};
 
-use libsrt_rs::SrtStream;
+use libsrt_rs::SrtOutStream;
 
 fn main() {
     if let Err(err) = run() {
@@ -20,7 +20,7 @@ fn run() -> Result<(), Error> {
     }
 
     let addr = args[0].parse()?;
-    let mut sock = SrtStream::connect(&addr)?;
+    let mut sock = SrtOutStream::connect(&addr)?;
     println!("connection established to {}", sock.peer_addr()?);
 
     let message = "This message should be sent to the other side".to_string();
