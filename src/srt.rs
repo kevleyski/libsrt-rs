@@ -1,5 +1,6 @@
 use std::io::{self, Read, Write, IoSlice, IoSliceMut};
 use std::net::SocketAddr;
+use std::fmt;
 
 use inner::SrtSocket;
 
@@ -36,7 +37,7 @@ impl Read for SrtStream {
     }
 
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        Ok(0)  // XXX
+        self.0.recv_vectored(bufs)
     }
 }
 
@@ -46,7 +47,7 @@ impl Write for SrtStream {
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        Ok(0)  // XXX
+        self.0.send_vectored(bufs)
     }
 
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
@@ -58,7 +59,7 @@ impl Read for &SrtStream {
     }
 
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        Ok(0)  // XXX
+        self.0.recv_vectored(bufs)
     }
 }
 
@@ -68,10 +69,26 @@ impl Write for &SrtStream {
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        Ok(0)  // XXX
+        self.0.send_vectored(bufs)
     }
 
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
+}
+
+impl fmt::Debug for SrtStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut res = f.debug_struct("SrtStream");
+
+        if let Ok(addr) = self.local_addr() {
+            res.field("addr", &addr);
+        }
+
+        if let Ok(peer) = self.peer_addr() {
+            res.field("peer", &peer);
+        }
+
+        res.finish()
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -101,5 +118,17 @@ impl SrtListener {
     /// Returns the local socket address of this listener.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.0.socket_addr()
+    }
+}
+
+impl fmt::Debug for SrtListener {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut res = f.debug_struct("SrtListener");
+
+        if let Ok(addr) = self.local_addr() {
+            res.field("addr", &addr);
+        }
+
+        res.finish()
     }
 }

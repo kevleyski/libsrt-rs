@@ -1,4 +1,4 @@
-use std::io;
+use std::io::{self, IoSlice, IoSliceMut};
 use std::mem;
 use std::net::SocketAddr;
 
@@ -19,8 +19,8 @@ impl SrtSocket {
         SrtSocket::new_raw(fam)
     }
 
-    pub fn new_raw(af: c_int) -> io::Result<SrtSocket> {
-        let sock = unsafe { srterr::cvt(srtffi::srt_socket(af, c::SOCK_DGRAM, c::IPPROTO_UDP))? };
+    fn new_raw(af: c_int) -> io::Result<SrtSocket> {
+        let sock = unsafe { srterr::cvt(srtffi::srt_socket(af as c_int, c::SOCK_DGRAM, c::IPPROTO_UDP))? };
         Ok(SrtSocket(sock))
     }
 
@@ -40,9 +40,9 @@ impl SrtSocket {
         Ok(())
     }
 
-    pub fn listen(&self, backlog: c_int) -> io::Result<()> {
+    pub fn listen(&self, backlog: usize) -> io::Result<()> {
         unsafe {
-            srterr::cvt(srtffi::srt_listen(self.0, backlog))?;
+            srterr::cvt(srtffi::srt_listen(self.0, backlog as c_int))?;
         }
         Ok(())
     }
@@ -83,6 +83,10 @@ impl SrtSocket {
         Ok(ret as usize)
     }
 
+    pub fn recv_vectored(&self, _bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
+    }
+
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         let ret = srterr::cvt(unsafe {
             srtffi::srt_sendmsg(
@@ -91,6 +95,10 @@ impl SrtSocket {
                 buf.len() as c_int)
         })?;
         Ok(ret as usize)
+    }
+
+    pub fn send_vectored(&self, _bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
     }
 }
 
