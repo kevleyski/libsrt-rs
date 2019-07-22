@@ -3,7 +3,7 @@ use std::process;
 use std::str;
 use failure::{self as f, Error};
 
-use libsrt_rs::SrtInListener;
+use libsrt_rs::{SrtInListener, SrtCommon};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 

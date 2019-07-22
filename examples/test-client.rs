@@ -4,7 +4,7 @@ use std::thread;
 use std::time::Duration;
 use failure::{self as f, Error};
 
-use libsrt_rs::SrtOutStream;
+use libsrt_rs::{SrtOutStream, SrtStream};
 
 fn main() {
     if let Err(err) = run() {
