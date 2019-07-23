@@ -3,7 +3,7 @@ use std::process;
 use std::str;
 use failure::{self as f, Error};
 
-use libsrt_rs::{SrtInputListener, SrtCommon};
+use libsrt_rs::{SrtListener, SrtCommon};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
@@ -21,17 +21,18 @@ fn run() -> Result<(), Error> {
     }
 
     let addr = args[0].parse()?;
-    let sock = SrtInputListener::bind(&addr)?;
-    println!("listening on {}", sock.local_addr()?);
+    let stream = SrtListener::bind(&addr)?;
+    println!("listening on {}", stream.local_addr()?);
 
-    let (mut peer_sock, peer_addr) = sock.accept()?;
+    let (peer_stream, peer_addr) = stream.accept()?;
     println!("connection established from {}", peer_addr);
+    let mut peer_input = peer_stream.input_stream()?;
 
     let mut buf = [0; DEFAULT_BUF_SIZE];
     for i in 0..100 {
         print!("read #{}... ", i);
 
-        let len = peer_sock.read(&mut buf)?;
+        let len = peer_input.read(&mut buf)?;
 
         println!("Got message of length {} << {}",
                  len,
