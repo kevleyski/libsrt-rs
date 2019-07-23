@@ -23,4 +23,4 @@ pub fn init() {
     // function.
 }
 
-pub use socket::SrtSocket;
+pub use socket::Socket;

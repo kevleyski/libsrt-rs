@@ -2,11 +2,11 @@ use std::io::{self, Read, Write, IoSlice, IoSliceMut};
 use std::net::SocketAddr;
 use std::fmt;
 
-use inner::SrtSocket;
+use libsrt_sys::{self as sys, Socket};
 
-pub trait SrtCommon {
+pub trait Common {
     /// Returns the internal socket.
-    fn as_inner(&self) -> &SrtSocket;
+    fn as_inner(&self) -> &Socket;
 
     /// Returns the socket address of the local half of this SRT connection.
     fn local_addr(&self) -> io::Result<SocketAddr> {
@@ -18,50 +18,46 @@ pub trait SrtCommon {
 // SRT streams
 ////////////////////////////////////////////////////////////////////////////////
 
-pub trait SrtCommonStream : SrtCommon {
+pub trait CommonStream : Common {
     /// Returns the socket address of the remote peer of this SRT connection.
     fn peer_addr(&self) -> io::Result<SocketAddr> {
         self.as_inner().peer_addr()
     }
 }
 
-fn connect_socket(addr: &SocketAddr) -> io::Result<SrtSocket> {
-    inner::init();
-
-    let sock = SrtSocket::new(addr)?;
-    sock.connect(addr)?;
-    Ok(sock)
-}
-
 /// A SRT stream between a local and a remote socket.
-pub struct SrtStream(SrtSocket);
+pub struct Stream(Socket);
 
-impl SrtStream {
+impl Stream {
     /// Opens a SRT connection to a remote host.
-    pub fn connect(addr: &SocketAddr) -> io::Result<SrtStream> {
-        Ok(SrtStream(connect_socket(addr)?))
+    pub fn connect(addr: &SocketAddr) -> io::Result<Stream> {
+        sys::init();
+
+        let sock = Socket::new(addr)?;
+        sock.connect(addr)?;
+        Ok(Stream(sock))
     }
 
-    pub fn input_stream(self) -> io::Result<SrtInputStream> {
-        Ok(SrtInputStream(self.0))
+    pub fn input_stream(self) -> io::Result<InputStream> {
+        Ok(InputStream(self.0))
     }
 
-    pub fn output_stream(self) -> io::Result<SrtOutputStream> {
-        Ok(SrtOutputStream(self.0))
+    pub fn output_stream(self) -> io::Result<OutputStream> {
+        Ok(OutputStream(self.0))
     }
 }
 
-impl SrtCommon for SrtStream {
-    fn as_inner(&self) -> &SrtSocket {
+impl Common for Stream {
+    fn as_inner(&self) -> &Socket {
         &self.0
     }
 }
 
-impl SrtCommonStream for SrtStream {}
+impl CommonStream for Stream {}
 
-impl fmt::Debug for SrtStream {
+impl fmt::Debug for Stream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("SrtStream");
+        let mut res = f.debug_struct("Stream");
 
         if let Ok(addr) = self.local_addr() {
             res.field("local", &addr);
@@ -76,17 +72,17 @@ impl fmt::Debug for SrtStream {
 }
 
 /// A SRT input stream between a local and a remote socket.
-pub struct SrtInputStream(SrtSocket);
+pub struct InputStream(Socket);
 
-impl SrtCommon for SrtInputStream {
-    fn as_inner(&self) -> &SrtSocket {
+impl Common for InputStream {
+    fn as_inner(&self) -> &Socket {
         &self.0
     }
 }
 
-impl SrtCommonStream for SrtInputStream {}
+impl CommonStream for InputStream {}
 
-impl Read for SrtInputStream {
+impl Read for InputStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.recv(buf)
     }
@@ -96,7 +92,7 @@ impl Read for SrtInputStream {
     }
 }
 
-impl Read for &SrtInputStream {
+impl Read for &InputStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.recv(buf)
     }
@@ -106,9 +102,9 @@ impl Read for &SrtInputStream {
     }
 }
 
-impl fmt::Debug for SrtInputStream {
+impl fmt::Debug for InputStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("SrtInputStream");
+        let mut res = f.debug_struct("InputStream");
 
         if let Ok(addr) = self.local_addr() {
             res.field("local", &addr);
@@ -123,17 +119,17 @@ impl fmt::Debug for SrtInputStream {
 }
 
 /// A SRT output stream between a local and a remote socket.
-pub struct SrtOutputStream(SrtSocket);
+pub struct OutputStream(Socket);
 
-impl SrtCommon for SrtOutputStream {
-    fn as_inner(&self) -> &SrtSocket {
+impl Common for OutputStream {
+    fn as_inner(&self) -> &Socket {
         &self.0
     }
 }
 
-impl SrtCommonStream for SrtOutputStream {}
+impl CommonStream for OutputStream {}
 
-impl Write for SrtOutputStream {
+impl Write for OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.send(buf)
     }
@@ -145,7 +141,7 @@ impl Write for SrtOutputStream {
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 
-impl Write for &SrtOutputStream {
+impl Write for &OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.send(buf)
     }
@@ -157,9 +153,9 @@ impl Write for &SrtOutputStream {
     fn flush(&mut self) -> io::Result<()> { Ok(()) }
 }
 
-impl fmt::Debug for SrtOutputStream {
+impl fmt::Debug for OutputStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("SrtOutputStream");
+        let mut res = f.debug_struct("OutputStream");
 
         if let Ok(addr) = self.local_addr() {
             res.field("local", &addr);
@@ -178,36 +174,36 @@ impl fmt::Debug for SrtOutputStream {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// A SRT input socket server, listening for connections.
-pub struct SrtListener(SrtSocket);
+pub struct Listener(Socket);
 
-impl SrtListener {
-    /// Creates a new `SrtListener` which will be bound to the specified
+impl Listener {
+    /// Creates a new `Listener` which will be bound to the specified
     /// address.
-    pub fn bind(addr: &SocketAddr) -> io::Result<SrtListener> {
-        inner::init();
+    pub fn bind(addr: &SocketAddr) -> io::Result<Listener> {
+        sys::init();
 
-        let sock = SrtSocket::new(addr)?;
+        let sock = Socket::new(addr)?;
         sock.bind(addr)?;
         sock.listen(128)?;
-        Ok(SrtListener(sock))
+        Ok(Listener(sock))
     }
 
     /// Accept a new incoming connection from this listener.
-    pub fn accept(&self) -> io::Result<(SrtStream, SocketAddr)> {
+    pub fn accept(&self) -> io::Result<(Stream, SocketAddr)> {
         let (sock, addr) = self.as_inner().accept()?;
-        Ok((SrtStream(sock), addr))
+        Ok((Stream(sock), addr))
     }
 }
 
-impl SrtCommon for SrtListener {
-    fn as_inner(&self) -> &SrtSocket {
+impl Common for Listener {
+    fn as_inner(&self) -> &Socket {
         &self.0
     }
 }
 
-impl fmt::Debug for SrtListener {
+impl fmt::Debug for Listener {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("SrtListener");
+        let mut res = f.debug_struct("Listener");
 
         if let Ok(addr) = self.local_addr() {
             res.field("listen", &addr);

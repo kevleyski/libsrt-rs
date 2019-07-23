@@ -8,20 +8,20 @@ use crate::error as srterr;
 use crate::ffi::{self as srtffi, SRTSOCKET};
 use crate::net as srtnet;
 
-pub struct SrtSocket(SRTSOCKET);
+pub struct Socket(SRTSOCKET);
 
-impl SrtSocket {
-    pub fn new(addr: &SocketAddr) -> io::Result<SrtSocket> {
+impl Socket {
+    pub fn new(addr: &SocketAddr) -> io::Result<Socket> {
         let fam = match *addr {
             SocketAddr::V4(..) => c::AF_INET,
             SocketAddr::V6(..) => c::AF_INET6,
         };
-        SrtSocket::new_raw(fam)
+        Socket::new_raw(fam)
     }
 
-    fn new_raw(af: c_int) -> io::Result<SrtSocket> {
+    fn new_raw(af: c_int) -> io::Result<Socket> {
         let sock = unsafe { srterr::cvt(srtffi::srt_socket(af as c_int, c::SOCK_DGRAM, c::IPPROTO_UDP))? };
-        Ok(SrtSocket(sock))
+        Ok(Socket(sock))
     }
 
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<()> {
@@ -47,7 +47,7 @@ impl SrtSocket {
         Ok(())
     }
 
-    pub fn accept(&self) -> io::Result<(SrtSocket, SocketAddr)> {
+    pub fn accept(&self) -> io::Result<(Socket, SocketAddr)> {
         let mut storage: sockaddr_storage = unsafe { mem::zeroed() };
         let mut len = mem::size_of_val(&storage) as socklen_t;
         let sock = unsafe {
@@ -58,7 +58,7 @@ impl SrtSocket {
             ))?
         };
         let addr = srtnet::from_sockaddr(&storage, len)?;
-        Ok((SrtSocket(sock), addr))
+        Ok((Socket(sock), addr))
     }
 
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
@@ -102,7 +102,7 @@ impl SrtSocket {
     }
 }
 
-impl Drop for SrtSocket {
+impl Drop for Socket {
     fn drop(&mut self) {
         unsafe {
             srtffi::srt_close(self.0);
