@@ -10,8 +10,13 @@ edition = "2018"
 libsrt-sys = { path = "libsrt-sys", version = "0.1.0" }
 libc = "0.2"
 iovec = "0.1.1"
+futures = "0.1.28"
+tokio-io = "0.1.12"
 
-failure = "0.1"                 # XXX only bin dependency
+failure = { version = "0.1.5", default-features = false, features=["std"] } # XXX only bin dependency
+
+[dev-dependencies]
+tokio = "0.1.22"
 
 [workspace]
 members = [

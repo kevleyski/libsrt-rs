@@ -232,15 +232,15 @@ extern "C" {
     pub fn srt_epoll_update_ssock(eid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
     pub fn srt_epoll_wait(
         eid: c_int,
-        readfds: *mut SRTSOCKET,
-        rnum: *mut c_int,
-        writefds: *mut SRTSOCKET,
-        wnum: *mut c_int,
-        msTimeOut: i64,
-        lrfds: *mut SYSSOCKET,
-        lrnum: *mut c_int,
-        lwfds: *mut SYSSOCKET,
-        lwnum: *mut c_int,
+        read_fds: *mut SRTSOCKET,
+        read_num: *mut c_int,
+        write_fds: *mut SRTSOCKET,
+        write_num: *mut c_int,
+        timeout_ms: i64,
+        lr_fds: *mut SYSSOCKET,
+        lr_num: *mut c_int,
+        lw_fds: *mut SYSSOCKET,
+        lw_num: *mut c_int,
     ) -> c_int;
     pub fn srt_epoll_release(eid: c_int) -> c_int;
 }
