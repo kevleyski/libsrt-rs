@@ -1,7 +1,7 @@
 mod error;
 mod ffi;
-mod net;
 mod socket;
+mod poll;
 
 pub fn init() {
     use std::sync::{Once, ONCE_INIT};
@@ -23,4 +23,5 @@ pub fn init() {
     // function.
 }
 
-pub use socket::Socket;
+pub use socket::{Socket, SRT_SOCKSTATUS as SOCKSTATUS};
+pub use poll::{Poll, Token, Event, EventKind, Events};

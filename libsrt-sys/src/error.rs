@@ -6,7 +6,7 @@ use std::io;
 
 use libc::c_int;
 
-use crate::ffi::{self as srtffi, SRTSOCKET};
+use crate::ffi::{self, SRTSOCKET};
 
 // copied from libstd::sys::cvt
 #[doc(hidden)]
@@ -39,17 +39,27 @@ pub struct Error<'a> {
 }
 
 impl<'a> Error<'a> {
+    pub fn new<S>(errcode: c_int, errstr: S) -> Error<'a>
+    where
+        S: Into<Cow<'a, str>>,
+    {
+        Error {
+            errcode,
+            errstr: errstr.into()
+        }
+    }
+
     pub fn last_error() -> Error<'a> {
         unsafe {
             let mut errno: c_int = 0;
-            let errcode = srtffi::srt_getlasterror(&mut errno);
-            let errstr = CStr::from_ptr(srtffi::srt_strerror(errcode, errno)).to_string_lossy();
-            Error { errcode, errstr }
+            let errcode = ffi::srt_getlasterror(&mut errno);
+            let errstr = CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy();
+            Error::new(errcode, errstr)
         }
     }
 
     pub fn kind(&self) -> io::ErrorKind {
-        srtffi::srt_errorkind(self.errcode)
+        ffi::srt_errorkind(self.errcode)
     }
 
     pub fn message(&self) -> &str {

@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::io::{self, Write};
 use std::process;
 use std::thread;
 use std::time::Duration;
@@ -28,9 +28,22 @@ fn run() -> Result<(), Error> {
     for i in 0..100 {
         println!("write #{} {}", i, message);
 
-        output.write(message.as_bytes())?;
-
-        thread::sleep(Duration::from_millis(1));
+        let mut sent_bytes = 0;
+        loop {
+            match output.write(&message.as_bytes()[sent_bytes..]) {
+                Ok(len) => {
+                    sent_bytes += len;
+                    if sent_bytes == message.len() {
+                        break;
+                    }
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
+                },
+                Err(e) => return Err(e.into()),
+            }
+        }
     }
 
     Ok(())

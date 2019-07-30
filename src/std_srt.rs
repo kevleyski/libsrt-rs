@@ -1,29 +1,33 @@
 use std::io::{self, Read, Write, IoSlice, IoSliceMut};
 use std::net::SocketAddr;
 use std::fmt;
+use std::time::Duration;
 
-use libsrt_sys::{self as sys, Socket};
+use libsrt_sys::{self as sys, Socket, SOCKSTATUS};
+pub use libsrt_sys::{Token, EventKind, Events};
 
-pub trait Common {
+pub trait AsSocket {
     /// Returns the internal socket.
-    fn as_inner(&self) -> &Socket;
+    fn as_socket(&self) -> &Socket;
+}
 
+pub trait Bind : AsSocket {
     /// Returns the socket address of the local half of this SRT connection.
     fn local_addr(&self) -> io::Result<SocketAddr> {
-        self.as_inner().socket_addr()
+        self.as_socket().socket_addr()
+    }
+}
+
+pub trait Connect : Bind {
+    /// Returns the socket address of the remote peer of this SRT connection.
+    fn peer_addr(&self) -> io::Result<SocketAddr> {
+        self.as_socket().peer_addr()
     }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // SRT streams
 ////////////////////////////////////////////////////////////////////////////////
-
-pub trait CommonStream : Common {
-    /// Returns the socket address of the remote peer of this SRT connection.
-    fn peer_addr(&self) -> io::Result<SocketAddr> {
-        self.as_inner().peer_addr()
-    }
-}
 
 /// A SRT stream between a local and a remote socket.
 pub struct Stream(Socket);
@@ -39,21 +43,25 @@ impl Stream {
     }
 
     pub fn input_stream(self) -> io::Result<InputStream> {
+        self.0.set_recv_nonblocking(true)?;
         Ok(InputStream(self.0))
     }
 
     pub fn output_stream(self) -> io::Result<OutputStream> {
+        self.0.set_send_nonblocking(true)?;
         Ok(OutputStream(self.0))
     }
 }
 
-impl Common for Stream {
-    fn as_inner(&self) -> &Socket {
+impl AsSocket for Stream {
+    fn as_socket(&self) -> &Socket {
         &self.0
     }
 }
 
-impl CommonStream for Stream {}
+impl Bind for Stream {}
+
+impl Connect for Stream {}
 
 impl fmt::Debug for Stream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -74,13 +82,15 @@ impl fmt::Debug for Stream {
 /// A SRT input stream between a local and a remote socket.
 pub struct InputStream(Socket);
 
-impl Common for InputStream {
-    fn as_inner(&self) -> &Socket {
+impl AsSocket for InputStream {
+    fn as_socket(&self) -> &Socket {
         &self.0
     }
 }
 
-impl CommonStream for InputStream {}
+impl Bind for InputStream {}
+
+impl Connect for InputStream {}
 
 impl Read for InputStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -121,13 +131,15 @@ impl fmt::Debug for InputStream {
 /// A SRT output stream between a local and a remote socket.
 pub struct OutputStream(Socket);
 
-impl Common for OutputStream {
-    fn as_inner(&self) -> &Socket {
+impl AsSocket for OutputStream {
+    fn as_socket(&self) -> &Socket {
         &self.0
     }
 }
 
-impl CommonStream for OutputStream {}
+impl Bind for OutputStream {}
+
+impl Connect for OutputStream {}
 
 impl Write for OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
@@ -185,21 +197,24 @@ impl Listener {
         let sock = Socket::new(addr)?;
         sock.bind(addr)?;
         sock.listen(128)?;
+        sock.set_recv_nonblocking(true)?;
         Ok(Listener(sock))
     }
 
     /// Accept a new incoming connection from this listener.
     pub fn accept(&self) -> io::Result<(Stream, SocketAddr)> {
-        let (sock, addr) = self.as_inner().accept()?;
+        let (sock, addr) = self.as_socket().accept()?;
         Ok((Stream(sock), addr))
     }
 }
 
-impl Common for Listener {
-    fn as_inner(&self) -> &Socket {
+impl AsSocket for Listener {
+    fn as_socket(&self) -> &Socket {
         &self.0
     }
 }
+
+impl Bind for Listener {}
 
 impl fmt::Debug for Listener {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -210,5 +225,49 @@ impl fmt::Debug for Listener {
         }
 
         res.finish()
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// SRT Poll
+////////////////////////////////////////////////////////////////////////////////
+
+/// Polls for readiness events on all registered values.
+pub struct Poll {
+    poll: sys::Poll,
+}
+
+impl Poll {
+    /// Return a new `Poll` handle.
+    pub fn new() -> io::Result<Poll> {
+        Ok(Poll {
+            poll: sys::Poll::new()?,
+        })
+    }
+
+    /// Register an `AsSocket` instance with the `Poll` instance.
+    pub fn register<S: ?Sized>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
+    where S: AsSocket
+    {
+        self.poll.register(socket.as_socket(), token, event)
+    }
+
+
+    /// Re-register an `AsSocket` instance with the `Poll` instance.
+    pub fn reregister<S: ?Sized>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
+    where S: AsSocket
+    {
+        self.poll.reregister(socket.as_socket(), token, event)
+    }
+
+    /// Deregister an `AsSocket` instance with the `Poll` instance.
+    pub fn deregister<S: ?Sized>(&self, socket: &S) -> io::Result<()>
+    where S: AsSocket
+    {
+        self.poll.deregister(socket.as_socket())
+    }
+
+    pub fn poll(&self, events: &mut Events, timeout: Option<Duration>) -> io::Result<usize> {
+        self.poll.poll(events, timeout)
     }
 }

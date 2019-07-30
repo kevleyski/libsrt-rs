@@ -10,20 +10,6 @@ compile_error!("libsrt doesn't compile for this platform yet");
 
 pub type UDPSOCKET = SYSSOCKET;
 
-// Values returned by srt_getsockstate()
-#[repr(C)]
-pub enum SRT_SOCKSTATUS {
-    SRTS_INIT = 1,
-    SRTS_OPENED,
-    SRTS_LISTENING,
-    SRTS_CONNECTING,
-    SRTS_CONNECTED,
-    SRTS_BROKEN,
-    SRTS_CLOSING,
-    SRTS_CLOSED,
-    SRTS_NONEXIST,
-}
-
 // This is a duplicate enum. Must be kept in sync with the original UDT enum for
 // backward compatibility until all compat is destroyed.
 #[repr(C)]
@@ -212,9 +198,28 @@ pub fn srt_errorkind(errcode: c_int) -> std::io::ErrorKind {
             _ => std::io::ErrorKind::Other,
         },
         // MJ_AGAIN
-        6 => std::io::ErrorKind::WouldBlock,
+        6 => match minor {
+            1 => std::io::ErrorKind::WouldBlock,
+            2 => std::io::ErrorKind::WouldBlock,
+            3 => std::io::ErrorKind::TimedOut,
+            _ => std::io::ErrorKind::WouldBlock, // XXX
+        }
         _ => std::io::ErrorKind::Other,
     }
+}
+
+// Values returned by srt_getsockstate()
+#[repr(C)]
+pub enum SRT_SOCKSTATUS {
+    SRTS_INIT = 1,
+    SRTS_OPENED,
+    SRTS_LISTENING,
+    SRTS_CONNECTING,
+    SRTS_CONNECTED,
+    SRTS_BROKEN,
+    SRTS_CLOSING,
+    SRTS_CLOSED,
+    SRTS_NONEXIST,
 }
 
 // Socket Status (for problem tracking)
@@ -222,16 +227,24 @@ extern "C" {
     pub fn srt_getsockstate(u: SRTSOCKET) -> SRT_SOCKSTATUS;
 }
 
+#[repr(C)]
+pub enum SRT_EPOLL_OPT {
+   SRT_EPOLL_OPT_NONE = 0x0, // fallback
+   SRT_EPOLL_IN = 0x1,
+   SRT_EPOLL_OUT = 0x4,
+   SRT_EPOLL_ERR = 0x8,
+}
+
 extern "C" {
     pub fn srt_epoll_create() -> c_int;
-    pub fn srt_epoll_add_usock(eid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_add_ssock(eid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_remove_usock(eid: c_int, u: SRTSOCKET) -> c_int;
-    pub fn srt_epoll_remove_ssock(eid: c_int, s: SYSSOCKET) -> c_int;
-    pub fn srt_epoll_update_usock(eid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_update_ssock(eid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
+    pub fn srt_epoll_add_usock(epid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
+    pub fn srt_epoll_add_ssock(epid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
+    pub fn srt_epoll_remove_usock(epid: c_int, u: SRTSOCKET) -> c_int;
+    pub fn srt_epoll_remove_ssock(epid: c_int, s: SYSSOCKET) -> c_int;
+    pub fn srt_epoll_update_usock(epid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
+    pub fn srt_epoll_update_ssock(epid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
     pub fn srt_epoll_wait(
-        eid: c_int,
+        epid: c_int,
         read_fds: *mut SRTSOCKET,
         read_num: *mut c_int,
         write_fds: *mut SRTSOCKET,
@@ -242,5 +255,5 @@ extern "C" {
         lw_fds: *mut SYSSOCKET,
         lw_num: *mut c_int,
     ) -> c_int;
-    pub fn srt_epoll_release(eid: c_int) -> c_int;
+    pub fn srt_epoll_release(epid: c_int) -> c_int;
 }
