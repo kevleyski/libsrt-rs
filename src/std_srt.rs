@@ -3,7 +3,8 @@ use std::net::SocketAddr;
 use std::fmt;
 use std::time::Duration;
 
-use libsrt_sys::{self as sys, Socket, SOCKSTATUS};
+use libsrt_sys::{self as sys, Socket};
+pub use libsrt_sys::int;
 pub use libsrt_sys::{Token, EventKind, Events};
 
 pub trait AsSocket {
@@ -38,7 +39,20 @@ impl Stream {
         sys::init();
 
         let sock = Socket::new(addr)?;
-        sock.connect(addr)?;
+
+        sock.set_send_nonblocking(true)?;
+        match sock.connect(addr) {
+            Ok(_) => {}
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+            Err(e) => return Err(e),
+        }
+
+        Ok(Stream(sock))
+    }
+
+    /// Creates a new `Stream` from the pending socket.
+    pub fn from_stream(sock: Socket) -> io::Result<Stream> {
+        sock.set_recv_nonblocking(true)?;
         Ok(Stream(sock))
     }
 
@@ -50,6 +64,10 @@ impl Stream {
     pub fn output_stream(self) -> io::Result<OutputStream> {
         self.0.set_send_nonblocking(true)?;
         Ok(OutputStream(self.0))
+    }
+
+    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
+        self.0.take_error()
     }
 }
 
@@ -204,7 +222,7 @@ impl Listener {
     /// Accept a new incoming connection from this listener.
     pub fn accept(&self) -> io::Result<(Stream, SocketAddr)> {
         let (sock, addr) = self.as_socket().accept()?;
-        Ok((Stream(sock), addr))
+        Ok((Stream::from_stream(sock)?, addr))
     }
 }
 

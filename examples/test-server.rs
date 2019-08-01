@@ -31,7 +31,7 @@ fn run() -> Result<(), Error> {
     let poll = Poll::new()?;
 
     // Register the listener
-    poll.register(&listen, LISTEN_TOKEN, EventKind::READABLE | EventKind::ERROR)?;
+    poll.register(&listen, LISTEN_TOKEN, EventKind::readable())?;
 
     // Create storage for events
     let mut events = Events::with_capacity(2);
@@ -59,7 +59,7 @@ fn run() -> Result<(), Error> {
                                 poll.deregister(&listen)?;
 
                                 let is = stream.input_stream()?;
-                                poll.register(&is, STREAM_TOKEN, EventKind::READABLE | EventKind::ERROR)?;
+                                poll.register(&is, STREAM_TOKEN, EventKind::readable() | EventKind::error())?;
                                 input_stream = Some(is);
                                 break;
                             }
@@ -98,7 +98,7 @@ fn run() -> Result<(), Error> {
                                 }
                                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                                     // Socket is not ready anymore, stop reading
-                                    println!("");
+                                    println!(""); // just for new line
                                     break;
 
                                 }

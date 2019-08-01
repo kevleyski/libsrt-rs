@@ -50,12 +50,10 @@ impl<'a> Error<'a> {
     }
 
     pub fn last_error() -> Error<'a> {
-        unsafe {
-            let mut errno: c_int = 0;
-            let errcode = ffi::srt_getlasterror(&mut errno);
-            let errstr = CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy();
-            Error::new(errcode, errstr)
-        }
+        let mut errno: c_int = 0;
+        let errcode = unsafe { ffi::srt_getlasterror(&mut errno) };
+        let errstr = unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
+        Error::new(errcode, errstr)
     }
 
     pub fn kind(&self) -> io::ErrorKind {
