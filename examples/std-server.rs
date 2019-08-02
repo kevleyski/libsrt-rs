@@ -1,12 +1,18 @@
 use std::io::{self, Read};
+use std::net::SocketAddr;
 use std::process;
 use std::str;
+
+use slab::Slab;
+
 use failure::{self as f, Error};
 
-use libsrt_rs::std_srt::{Listener, Bind, InputStream};
+use libsrt_rs::std_srt::{Listener, AsSocket, Bind, Connect};
 use libsrt_rs::std_srt::{Poll, Token, EventKind, Events};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
+
+const MAX_CONNECTIONS: usize = 1024;
 
 fn main() {
     if let Err(err) = run() {
@@ -16,8 +22,7 @@ fn main() {
 }
 
 fn run() -> Result<(), Error> {
-    const LISTEN_TOKEN: Token = Token(0);
-    const STREAM_TOKEN: Token = Token(1);
+    const LISTEN_TOKEN: Token = Token(MAX_CONNECTIONS);
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 1 {
@@ -36,8 +41,8 @@ fn run() -> Result<(), Error> {
     // Create storage for events
     let mut events = Events::with_capacity(2);
 
-    let mut input_stream: Option<InputStream> = None;
-    let mut i = 0;
+    // Used to store the connections
+    let mut connections = Slab::with_capacity(MAX_CONNECTIONS);
 
     // The main event loop
     'outer: loop {
@@ -56,11 +61,12 @@ fn run() -> Result<(), Error> {
                         match listen.accept() {
                             Ok((stream, peer_addr)) => {
                                 println!("connection established from {}", peer_addr);
-                                poll.deregister(&listen)?;
-
-                                let is = stream.input_stream()?;
-                                poll.register(&is, STREAM_TOKEN, EventKind::readable() | EventKind::error())?;
-                                input_stream = Some(is);
+                                let index = connections.insert(Connection {
+                                    sock: stream.input_stream()?,
+                                    peer_addr: peer_addr,
+                                });
+                                poll.register(&connections.get_mut(index).unwrap().sock,
+                                              Token(index), EventKind::readable() | EventKind::error())?;
                                 break;
                             }
                             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -71,46 +77,55 @@ fn run() -> Result<(), Error> {
                         }
                     }
                 }
-                STREAM_TOKEN => {
+                Token(index) => {
                     let kind = event.kind();
 
                     if kind.is_error() {
-                        println!("connection closed");
-                        poll.deregister(input_stream.as_ref().unwrap())?;
-                        break 'outer;
+                        println!("srt read from {}...connection closed",
+                                 connections.get(index).unwrap().peer_addr);
+                        poll.deregister(&connections.get_mut(index).unwrap().sock)?;
+                        connections.remove(index);
                     } else if kind.is_readable() {
                         let mut buf = [0; DEFAULT_BUF_SIZE];
                         loop {
-                            print!("srt read {}...", i);
-                            match input_stream.as_ref().unwrap().read(&mut buf) {
+                            print!("srt read from {}...",
+                                   connections.get(index).unwrap().sock.peer_addr().unwrap());
+                            match &connections.get_mut(index).unwrap().sock.read(&mut buf) {
                                 Ok(0) => {
                                     // XXX DO NOT WORK
                                     // Socket is closed, remove it
                                     println!("connection closed");
-                                    poll.deregister(input_stream.as_ref().unwrap())?;
-                                    break 'outer;
+                                    poll.deregister(&connections.get_mut(index).unwrap().sock)?;
+                                    connections.remove(index);
+                                    break;
                                 }
                                 Ok(ref len) => {
-                                    println!("Got message of length {} << {}",
+                                    println!("got message of length {} << {}",
                                              len,
                                              str::from_utf8(&buf[0..*len])?);
-                                    i += 1;
                                 }
                                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                                     // Socket is not ready anymore, stop reading
-                                    println!(""); // just for new line
+                                    println!("not ready");
                                     break;
 
                                 }
-                                Err(e) => return Err(e.into()), // Unexpected error
+                                Err(e) => {
+                                    println!("error: {}", e);
+                                    poll.deregister(&connections.get_mut(index).unwrap().sock)?;
+                                    connections.remove(index);
+                                    break;
+                                }
                             }
                         }
                     }
                 }
-                _ => unreachable!(),
             }
         }
     }
+}
 
-    Ok(())
+struct Connection<T: AsSocket + Connect + Read> {
+    sock: T,
+    peer_addr: SocketAddr,
 }

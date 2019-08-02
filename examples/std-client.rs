@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 use std::process;
+use std::thread;
 use std::time::Duration;
 use failure::{self as f, Error};
 
@@ -18,7 +19,7 @@ fn run() -> Result<(), Error> {
 
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() < 1 {
-        return Err(f::err_msg("Usage: test-client IP:PORT"));
+        return Err(f::err_msg("Usage: test-client"));
     }
 
     let poll = Poll::new()?;
@@ -39,7 +40,7 @@ fn run() -> Result<(), Error> {
 
     poll.reregister(&output, TOKEN, EventKind::writable() | EventKind::error())?;
 
-    let message = "This message should be sent to the other side".to_string();
+    let message = format!("This message should be sent to the other side");
     'outer: for i in 0..100 {
         println!("write #{} {}", i, message);
 
@@ -75,6 +76,8 @@ fn run() -> Result<(), Error> {
                 Err(e) => return Err(e.into()),
             }
         }
+
+        thread::sleep(Duration::from_millis(100));
     }
 
     // XXX To avoid the error message:
