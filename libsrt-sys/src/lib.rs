@@ -25,3 +25,4 @@ pub fn init() {
 
 pub use socket::{Socket, SRT_SOCKSTATUS as SOCKSTATUS};
 pub use poll::{Poll, Token, Event, EventKind, Events};
+pub use libc::c_int as int;

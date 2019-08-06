@@ -4,7 +4,7 @@ use std::ffi::CStr;
 use std::fmt;
 use std::io;
 
-use libc::c_int;
+use libc::c_int as int;
 
 use crate::ffi::{self, SRTSOCKET};
 
@@ -34,12 +34,12 @@ pub fn cvt<T: IsMinusOne>(t: T) -> io::Result<T> {
 }
 
 pub struct Error<'a> {
-    errcode: c_int,
+    errcode: int,
     errstr: Cow<'a, str>,
 }
 
 impl<'a> Error<'a> {
-    pub fn new<S>(errcode: c_int, errstr: S) -> Error<'a>
+    pub fn new<S>(errcode: int, errstr: S) -> Error<'a>
     where
         S: Into<Cow<'a, str>>,
     {
@@ -50,7 +50,7 @@ impl<'a> Error<'a> {
     }
 
     pub fn last_error() -> Error<'a> {
-        let mut errno: c_int = 0;
+        let mut errno: int = 0;
         let errcode = unsafe { ffi::srt_getlasterror(&mut errno) };
         let errstr = unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
         Error::new(errcode, errstr)

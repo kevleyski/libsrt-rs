@@ -1,8 +1,9 @@
 use std::io::{self, IoSlice, IoSliceMut};
 use std::mem;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::ffi::CStr;
 
-use libc::{self as c, c_char, c_int, sockaddr, sockaddr_storage, sockaddr_in, sockaddr_in6, socklen_t};
+use libc::{self as c, c_char, c_int as int, sockaddr, sockaddr_storage, sockaddr_in, sockaddr_in6, socklen_t};
 
 use crate::error as err;
 use crate::ffi::{self, SRTSOCKET};
@@ -19,8 +20,8 @@ impl Socket {
         Socket::new_raw(fam)
     }
 
-    fn new_raw(af: c_int) -> io::Result<Socket> {
-        let sock = unsafe { err::cvt(ffi::srt_socket(af as c_int, c::SOCK_DGRAM, c::IPPROTO_UDP))? };
+    fn new_raw(af: int) -> io::Result<Socket> {
+        let sock = unsafe { err::cvt(ffi::srt_socket(af as int, c::SOCK_DGRAM, c::IPPROTO_UDP))? };
         Ok(Socket(sock))
     }
 
@@ -31,7 +32,7 @@ impl Socket {
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<()> {
         let (addrp, len) = into_sockaddr(addr);
         unsafe {
-            err::cvt(ffi::srt_connect(self.0, addrp, len as c_int))?;
+            err::cvt(ffi::srt_connect(self.0, addrp, len as int))?;
         }
         Ok(())
     }
@@ -39,14 +40,14 @@ impl Socket {
     pub fn bind(&self, addr: &SocketAddr) -> io::Result<()> {
         let (addrp, len) = into_sockaddr(addr);
         unsafe {
-            err::cvt(ffi::srt_bind(self.0, addrp, len as c_int))?;
+            err::cvt(ffi::srt_bind(self.0, addrp, len as int))?;
         }
         Ok(())
     }
 
     pub fn listen(&self, backlog: usize) -> io::Result<()> {
         unsafe {
-            err::cvt(ffi::srt_listen(self.0, backlog as c_int))?;
+            err::cvt(ffi::srt_listen(self.0, backlog as int))?;
         }
         Ok(())
     }
@@ -82,7 +83,7 @@ impl Socket {
             ffi::srt_recvmsg(
                 self.0,
                 buf.as_mut_ptr() as *mut c_char,
-                buf.len() as c_int)
+                buf.len() as int)
         })?;
         Ok(ret as usize)
     }
@@ -96,7 +97,7 @@ impl Socket {
             ffi::srt_sendmsg(
                 self.0,
                 buf.as_ptr() as *const c_char,
-                buf.len() as c_int)
+                buf.len() as int)
         })?;
         Ok(ret as usize)
     }
@@ -106,33 +107,44 @@ impl Socket {
     }
 
     pub fn set_recv_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (! nonblocking) as libc::c_int;
+        let mut blocking = (! nonblocking) as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
                 ffi::SRT_SOCKOPT::SRTO_RCVSYN,
                 &mut blocking as *mut _ as *mut _,
-                mem::size_of::<c_int>() as c_int)
+                mem::size_of::<int>() as int)
         })?;
         Ok(())
     }
 
     pub fn set_send_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (! nonblocking) as libc::c_int;
+        let mut blocking = (! nonblocking) as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
                 ffi::SRT_SOCKOPT::SRTO_SNDSYN,
                 &mut blocking as *mut _ as *mut _,
-                mem::size_of::<c_int>() as c_int)
+                mem::size_of::<int>() as int)
         })?;
         Ok(())
     }
 
     pub fn getsockstate(&self) -> io::Result<ffi::SRT_SOCKSTATUS> {
         Ok(unsafe { ffi::srt_getsockstate(self.0) })
+    }
+
+    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
+        let mut errno: int = 0;
+        let errcode = unsafe { ffi::srt_getlasterror(&mut errno) };
+        if errno == 0 {
+            return Ok(None);
+        }
+        let errstr = unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
+        let err = err::Error::new(errcode, errstr);
+        Ok(Some(io::Error::new(err.kind(), err)))
     }
 }
 
@@ -160,7 +172,7 @@ pub fn into_sockaddr(addr: &SocketAddr) -> (*const sockaddr, socklen_t) {
 
 // XXX copied from libstd::net::addr
 pub fn from_sockaddr(storage: &sockaddr_storage, len: socklen_t) -> io::Result<SocketAddr> {
-    match storage.ss_family as c_int {
+    match storage.ss_family as int {
         c::AF_INET => {
             assert!(len as usize >= mem::size_of::<sockaddr_in>());
             Ok(SocketAddr::V4(SocketAddrV4::new(
@@ -191,7 +203,7 @@ pub fn from_sockaddr(storage: &sockaddr_storage, len: socklen_t) -> io::Result<S
 
 // XXX copied from libstd::sys-common::net
 pub fn sockname<F>(f: F) -> io::Result<SocketAddr>
-    where F: FnOnce(*mut sockaddr, *mut socklen_t) -> c_int
+    where F: FnOnce(*mut sockaddr, *mut socklen_t) -> int
 {
     unsafe {
         let mut storage: sockaddr_storage = mem::zeroed();

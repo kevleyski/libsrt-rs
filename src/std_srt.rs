@@ -264,7 +264,7 @@ impl Poll {
     }
 
     /// Register an `AsSocket` instance with the `Poll` instance.
-    pub fn register<S: ?Sized>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
+    pub fn register<S: AsSocket>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
     where S: AsSocket
     {
         self.poll.register(socket.as_socket(), token, event)
@@ -272,14 +272,14 @@ impl Poll {
 
 
     /// Re-register an `AsSocket` instance with the `Poll` instance.
-    pub fn reregister<S: ?Sized>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
+    pub fn reregister<S: AsSocket>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
     where S: AsSocket
     {
         self.poll.reregister(socket.as_socket(), token, event)
     }
 
     /// Deregister an `AsSocket` instance with the `Poll` instance.
-    pub fn deregister<S: ?Sized>(&self, socket: &S) -> io::Result<()>
+    pub fn deregister<S: AsSocket>(&self, socket: &S) -> io::Result<()>
     where S: AsSocket
     {
         self.poll.deregister(socket.as_socket())

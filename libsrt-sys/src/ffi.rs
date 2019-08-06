@@ -1,10 +1,11 @@
 #![allow(non_camel_case_types, unused_extern_crates, dead_code)] // XXX dead_code
-use libc::{c_char, c_int, c_void, sockaddr};
+use libc::{c_char, c_void, sockaddr};
 
-pub type SRTSOCKET = c_int;
+pub use libc::c_int as int;
+pub type SRTSOCKET = int;
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-pub type SYSSOCKET = c_int;
+pub type SYSSOCKET = int;
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 compile_error!("libsrt doesn't compile for this platform yet");
 
@@ -79,74 +80,74 @@ pub enum SRT_TRANSTYPE {
 }
 
 pub const SRT_INVALID_SOCK: SRTSOCKET = -1;
-pub const SRT_ERROR: c_int = -1;
+pub const SRT_ERROR: int = -1;
 
 // library initialization
 extern "C" {
-    pub fn srt_startup() -> c_int;
-    pub fn srt_cleanup() -> c_int;
+    pub fn srt_startup() -> int;
+    pub fn srt_cleanup() -> int;
 }
 
 // socket operations
 extern "C" {
-    pub fn srt_socket(af: c_int, typ: c_int, protocol: c_int) -> SRTSOCKET;
+    pub fn srt_socket(af: int, typ: int, protocol: int) -> SRTSOCKET;
     pub fn srt_create_socket() -> SRTSOCKET;
-    pub fn srt_bind(u: SRTSOCKET, name: *const sockaddr, namelen: c_int) -> c_int;
-    pub fn srt_bind_peerof(u: SRTSOCKET, udpsock: UDPSOCKET) -> c_int;
-    pub fn srt_listen(u: SRTSOCKET, backlog: c_int) -> c_int;
-    pub fn srt_accept(u: SRTSOCKET, addr: *mut sockaddr, addrlen: *mut c_int) -> SRTSOCKET;
-    pub fn srt_connect(u: SRTSOCKET, name: *const sockaddr, namelen: c_int) -> c_int;
+    pub fn srt_bind(u: SRTSOCKET, name: *const sockaddr, namelen: int) -> int;
+    pub fn srt_bind_peerof(u: SRTSOCKET, udpsock: UDPSOCKET) -> int;
+    pub fn srt_listen(u: SRTSOCKET, backlog: int) -> int;
+    pub fn srt_accept(u: SRTSOCKET, addr: *mut sockaddr, addrlen: *mut int) -> SRTSOCKET;
+    pub fn srt_connect(u: SRTSOCKET, name: *const sockaddr, namelen: int) -> int;
     pub fn srt_connect_debug(
         u: SRTSOCKET,
         name: *const sockaddr,
-        namelen: c_int,
-        forced_isn: c_int,
-    ) -> c_int;
+        namelen: int,
+        forced_isn: int,
+    ) -> int;
     pub fn srt_rendezvous(
         u: SRTSOCKET,
         local_name: *const sockaddr,
-        local_namelen: c_int,
+        local_namelen: int,
         remote_name: *const sockaddr,
-        remote_namelen: c_int,
-    ) -> c_int;
-    pub fn srt_close(u: SRTSOCKET) -> c_int;
-    pub fn srt_getpeername(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut c_int) -> c_int;
-    pub fn srt_getsockname(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut c_int) -> c_int;
+        remote_namelen: int,
+    ) -> int;
+    pub fn srt_close(u: SRTSOCKET) -> int;
+    pub fn srt_getpeername(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut int) -> int;
+    pub fn srt_getsockname(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut int) -> int;
     pub fn srt_getsockopt(
         u: SRTSOCKET,
-        level: c_int,
+        level: int,
         /*ignored*/ optname: SRT_SOCKOPT,
         optval: *mut c_void,
-        optlen: *mut c_int,
-    ) -> c_int;
+        optlen: *mut int,
+    ) -> int;
     pub fn srt_setsockopt(
         u: SRTSOCKET,
-        level: c_int,
+        level: int,
         /*ignored*/ optname: SRT_SOCKOPT,
         optval: *const c_void,
-        optlen: c_int,
-    ) -> c_int;
+        optlen: int,
+    ) -> int;
     pub fn srt_getsockflag(
         u: SRTSOCKET,
         opt: SRT_SOCKOPT,
         optval: *mut c_void,
-        optlen: *mut c_int,
-    ) -> c_int;
+        optlen: *mut int,
+    ) -> int;
     pub fn srt_setsockflag(
         u: SRTSOCKET,
         opt: SRT_SOCKOPT,
         optval: *const c_void,
-        optlen: c_int,
-    ) -> c_int;
+        optlen: int,
+    ) -> int;
 }
 
 // XXX Note that the srctime functionality doesn't work yet and needs fixing.
 #[repr(C)]
 pub struct SRT_MSGCTRL {
-    flags: c_int,    // Left for future
-    msgttl: c_int,   // TTL for a message, default -1 (delivered always)
-    inorder: c_int, // Whether a message is allowed to supersede partially lost one. Unused in stream and live mode.
-    boundary: c_int, //0:mid pkt, 1(01b):end of frame, 2(11b):complete frame, 3(10b): start of frame
+    flags: int,    // Left for future
+    msgttl: int,   // TTL for a message, default -1 (delivered always)
+    inorder: int, // Whether a message is allowed to supersede partially lost one. Unused in stream and live mode.
+    boundary: int, //0:mid pkt, 1(01b):end of frame, 2(11b):complete frame, 3(10b): start of frame
     srctime: u64,   // source timestamp (usec), 0: use internal time
     pktseq: i32,    // sequence number of the first packet in received message (unused for sending)
     msgno: i32,     // message number (output value for both sending and receiving)
@@ -161,18 +162,18 @@ extern "C" {
 
 // The send/receive functions.
 extern "C" {
-    pub fn srt_sendmsg(u: SRTSOCKET, buf: *const c_char, len: c_int) -> c_int;
-    pub fn srt_recvmsg(u: SRTSOCKET, buf: *mut c_char, len: c_int) -> c_int;
+    pub fn srt_sendmsg(u: SRTSOCKET, buf: *const c_char, len: int) -> int;
+    pub fn srt_recvmsg(u: SRTSOCKET, buf: *mut c_char, len: int) -> int;
 }
 
 // last error detection
 extern "C" {
-    pub fn srt_getlasterror(errno_loc: *mut c_int) -> c_int;
-    pub fn srt_strerror(code: c_int, errnoval: c_int) -> *const c_char;
+    pub fn srt_getlasterror(errno_loc: *mut int) -> int;
+    pub fn srt_strerror(code: int, errnoval: int) -> *const c_char;
 }
 
 // XXX
-pub fn srt_errorkind(errcode: c_int) -> std::io::ErrorKind {
+pub fn srt_errorkind(errcode: int) -> std::io::ErrorKind {
     let major = errcode / 1000;
     let minor = errcode % 1000;
     match major {
@@ -236,24 +237,24 @@ pub enum SRT_EPOLL_OPT {
 }
 
 extern "C" {
-    pub fn srt_epoll_create() -> c_int;
-    pub fn srt_epoll_add_usock(epid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_add_ssock(epid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_remove_usock(epid: c_int, u: SRTSOCKET) -> c_int;
-    pub fn srt_epoll_remove_ssock(epid: c_int, s: SYSSOCKET) -> c_int;
-    pub fn srt_epoll_update_usock(epid: c_int, u: SRTSOCKET, events: *const c_int) -> c_int;
-    pub fn srt_epoll_update_ssock(epid: c_int, s: SYSSOCKET, events: *const c_int) -> c_int;
+    pub fn srt_epoll_create() -> int;
+    pub fn srt_epoll_add_usock(epid: int, u: SRTSOCKET, events: *const int) -> int;
+    pub fn srt_epoll_add_ssock(epid: int, s: SYSSOCKET, events: *const int) -> int;
+    pub fn srt_epoll_remove_usock(epid: int, u: SRTSOCKET) -> int;
+    pub fn srt_epoll_remove_ssock(epid: int, s: SYSSOCKET) -> int;
+    pub fn srt_epoll_update_usock(epid: int, u: SRTSOCKET, events: *const int) -> int;
+    pub fn srt_epoll_update_ssock(epid: int, s: SYSSOCKET, events: *const int) -> int;
     pub fn srt_epoll_wait(
-        epid: c_int,
+        epid: int,
         read_fds: *mut SRTSOCKET,
-        read_num: *mut c_int,
+        read_num: *mut int,
         write_fds: *mut SRTSOCKET,
-        write_num: *mut c_int,
+        write_num: *mut int,
         timeout_ms: i64,
         lr_fds: *mut SYSSOCKET,
-        lr_num: *mut c_int,
+        lr_num: *mut int,
         lw_fds: *mut SYSSOCKET,
-        lw_num: *mut c_int,
-    ) -> c_int;
-    pub fn srt_epoll_release(epid: c_int) -> c_int;
+        lw_num: *mut int,
+    ) -> int;
+    pub fn srt_epoll_release(epid: int) -> int;
 }
