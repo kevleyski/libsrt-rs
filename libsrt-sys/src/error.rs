@@ -45,7 +45,7 @@ impl<'a> Error<'a> {
     {
         Error {
             errcode,
-            errstr: errstr.into()
+            errstr: errstr.into(),
         }
     }
 

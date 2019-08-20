@@ -1,13 +1,13 @@
-use std::io;
+use std::cmp;
+use std::collections::{HashMap, HashSet};
+use std::ffi::CStr;
 use std::fmt;
+use std::io;
+use std::iter::FromIterator;
 use std::ops;
 use std::ptr;
-use std::cmp;
-use std::iter::FromIterator;
 use std::sync::RwLock;
-use std::collections::{HashSet, HashMap};
 use std::time::Duration;
-use std::ffi::CStr;
 
 use crate::error as err;
 use crate::ffi::{self, int, SRTSOCKET};
@@ -22,7 +22,7 @@ pub struct Poll {
 impl Poll {
     /// Return a new `Poll` handle.
     pub fn new() -> io::Result<Poll> {
-        let epid = err::cvt(unsafe {ffi::srt_epoll_create()})?;
+        let epid = err::cvt(unsafe { ffi::srt_epoll_create() })?;
         Ok(Poll {
             epid: epid,
             socks: RwLock::new(HashMap::new()),
@@ -32,9 +32,7 @@ impl Poll {
     /// Register the socket on the `Poll` instance.
     pub fn register(&self, sock: &Socket, token: Token, event: EventKind) -> io::Result<()> {
         let e = event.0;
-        err::cvt(unsafe {
-            ffi::srt_epoll_add_usock(self.epid, sock.as_raw(), &e)
-        })?;
+        err::cvt(unsafe { ffi::srt_epoll_add_usock(self.epid, sock.as_raw(), &e) })?;
         self.socks.write().unwrap().insert(sock.as_raw(), token);
         Ok(())
     }
@@ -42,9 +40,7 @@ impl Poll {
     /// Re-register the socket with the `Poll` instance.
     pub fn reregister(&self, sock: &Socket, token: Token, event: EventKind) -> io::Result<()> {
         let e = event.0;
-        err::cvt(unsafe {
-            ffi::srt_epoll_update_usock(self.epid, sock.as_raw(), &e)
-        })?;
+        err::cvt(unsafe { ffi::srt_epoll_update_usock(self.epid, sock.as_raw(), &e) })?;
         self.socks.write().unwrap().insert(sock.as_raw(), token);
         Ok(())
     }
@@ -52,9 +48,7 @@ impl Poll {
     /// Deregister the socket from the `Poll` instance.
     pub fn deregister(&self, sock: &Socket) -> io::Result<()> {
         self.socks.write().unwrap().remove(&(sock.as_raw()));
-        err::cvt(unsafe {
-            ffi::srt_epoll_remove_usock(self.epid, sock.as_raw())
-        })?;
+        err::cvt(unsafe { ffi::srt_epoll_remove_usock(self.epid, sock.as_raw()) })?;
         Ok(())
     }
 
@@ -88,7 +82,8 @@ impl Poll {
                 ptr::null_mut(),
                 ptr::null_mut(),
                 ptr::null_mut(),
-                ptr::null_mut())
+                ptr::null_mut(),
+            )
         };
 
         if ret > 0 {
@@ -106,20 +101,22 @@ impl Poll {
         } else {
             let mut errno: int = 0;
             let errcode = unsafe { ffi::srt_getlasterror(&mut errno) };
-            if errcode == 6003 { // XXX SRT_ETIMEOUT (MJ_AGAIN, XMTIMEOUT)
+            if errcode == 6003 {
+                // XXX SRT_ETIMEOUT (MJ_AGAIN, XMTIMEOUT)
                 unsafe {
                     rd_socks.set_len(0);
                     wr_socks.set_len(0);
                 }
             } else {
-                let errstr = unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
+                let errstr =
+                    unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
                 let err = err::Error::new(errcode, errstr);
                 return Err(io::Error::new(err.kind(), err));
             }
         }
 
         let mut new_evts = Events::with_capacity(cmp::max(rd_socks.len(), wr_socks.len()));
-        let mut wr_socks_set: HashSet::<SRTSOCKET> = HashSet::from_iter(wr_socks.to_vec());
+        let mut wr_socks_set = HashSet::<SRTSOCKET>::from_iter(wr_socks.to_vec());
         for sock in rd_socks {
             if sock == ffi::SRT_INVALID_SOCK {
                 continue;
@@ -127,19 +124,27 @@ impl Poll {
             if wr_socks_set.contains(&sock) {
                 wr_socks_set.remove(&sock);
                 if srt_is_closed(sock) {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::error()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::error(),
+                    ));
                 } else {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::readable() | EventKind::writable()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::readable() | EventKind::writable(),
+                    ));
                 }
             } else {
                 if srt_is_closed(sock) {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::error()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::error(),
+                    ));
                 } else {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::readable()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::readable(),
+                    ));
                 }
             }
         }
@@ -150,11 +155,15 @@ impl Poll {
             }
             if wr_socks_set.contains(&sock) {
                 if srt_is_closed(sock) {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::error()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::error(),
+                    ));
                 } else {
-                    new_evts.push(Event::new(*(self.socks.read().unwrap().get(&sock).unwrap()),
-                                             EventKind::writable()));
+                    new_evts.push(Event::new(
+                        *(self.socks.read().unwrap().get(&sock).unwrap()),
+                        EventKind::writable(),
+                    ));
                 }
             }
         }
@@ -177,16 +186,10 @@ impl Drop for Poll {
 
 fn srt_is_closed(sock: SRTSOCKET) -> bool {
     match unsafe { ffi::srt_getsockstate(sock) } {
-        ffi::SRT_SOCKSTATUS::SRTS_BROKEN => {
-            true
-        }
-        ffi::SRT_SOCKSTATUS::SRTS_NONEXIST => {
-            true
-        }
-        ffi::SRT_SOCKSTATUS::SRTS_CLOSED => {
-            true
-        }
-        _ => false
+        ffi::SRT_SOCKSTATUS::SRTS_BROKEN => true,
+        ffi::SRT_SOCKSTATUS::SRTS_NONEXIST => true,
+        ffi::SRT_SOCKSTATUS::SRTS_CLOSED => true,
+        _ => false,
     }
 }
 
@@ -343,7 +346,7 @@ impl Events {
     /// Return a new `Events` capable of holding up to `capacity` events.
     pub fn with_capacity(u: usize) -> Events {
         Events {
-            events: Vec::with_capacity(u)
+            events: Vec::with_capacity(u),
         }
     }
 
@@ -370,9 +373,7 @@ impl Events {
     }
 
     pub fn get(&self, idx: usize) -> Option<Event> {
-        self.events.get(idx).map(|event| {
-            *event
-        })
+        self.events.get(idx).map(|event| *event)
     }
 
     pub fn push(&mut self, event: Event) {
@@ -398,9 +399,7 @@ impl<'a> Iterator for Iter<'a> {
     type Item = Event;
 
     fn next(&mut self) -> Option<Event> {
-        self.inner.next().map(|event| {
-            *event
-        })
+        self.inner.next().map(|event| *event)
     }
 }
 

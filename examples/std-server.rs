@@ -7,8 +7,8 @@ use slab::Slab;
 
 use failure::{self as f, Error};
 
-use libsrt_rs::std_srt::{Listener, AsSocket, Bind, Connect};
-use libsrt_rs::std_srt::{Poll, Token, EventKind, Events};
+use libsrt_rs::std_srt::{AsSocket, Bind, Connect, Listener};
+use libsrt_rs::std_srt::{EventKind, Events, Poll, Token};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 
@@ -65,8 +65,11 @@ fn run() -> Result<(), Error> {
                                     sock: stream.input_stream()?,
                                     peer_addr: peer_addr,
                                 });
-                                poll.register(&connections.get_mut(index).unwrap().sock,
-                                              Token(index), EventKind::readable() | EventKind::error())?;
+                                poll.register(
+                                    &connections.get_mut(index).unwrap().sock,
+                                    Token(index),
+                                    EventKind::readable() | EventKind::error(),
+                                )?;
                                 break;
                             }
                             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -81,15 +84,19 @@ fn run() -> Result<(), Error> {
                     let kind = event.kind();
 
                     if kind.is_error() {
-                        println!("srt read from {}...connection closed",
-                                 connections.get(index).unwrap().peer_addr);
+                        println!(
+                            "srt read from {}...connection closed",
+                            connections.get(index).unwrap().peer_addr
+                        );
                         poll.deregister(&connections.get_mut(index).unwrap().sock)?;
                         connections.remove(index);
                     } else if kind.is_readable() {
                         let mut buf = [0; DEFAULT_BUF_SIZE];
                         loop {
-                            print!("srt read from {}...",
-                                   connections.get(index).unwrap().sock.peer_addr().unwrap());
+                            print!(
+                                "srt read from {}...",
+                                connections.get(index).unwrap().sock.peer_addr().unwrap()
+                            );
                             match &connections.get_mut(index).unwrap().sock.read(&mut buf) {
                                 Ok(0) => {
                                     // XXX DO NOT WORK
@@ -100,15 +107,16 @@ fn run() -> Result<(), Error> {
                                     break;
                                 }
                                 Ok(ref len) => {
-                                    println!("got message of length {} << {}",
-                                             len,
-                                             str::from_utf8(&buf[0..*len])?);
+                                    println!(
+                                        "got message of length {} << {}",
+                                        len,
+                                        str::from_utf8(&buf[0..*len])?
+                                    );
                                 }
                                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                                     // Socket is not ready anymore, stop reading
                                     println!("not ready");
                                     break;
-
                                 }
                                 Err(e) => {
                                     println!("error: {}", e);

@@ -1,25 +1,25 @@
-use std::io::{self, Read, Write, IoSlice, IoSliceMut};
-use std::net::SocketAddr;
 use std::fmt;
+use std::io::{self, IoSlice, IoSliceMut, Read, Write};
+use std::net::SocketAddr;
 use std::time::Duration;
 
-use libsrt_sys::{self as sys, Socket};
 pub use libsrt_sys::int;
-pub use libsrt_sys::{Token, EventKind, Events};
+use libsrt_sys::{self as sys, Socket};
+pub use libsrt_sys::{EventKind, Events, Token};
 
 pub trait AsSocket {
     /// Returns the internal socket.
     fn as_socket(&self) -> &Socket;
 }
 
-pub trait Bind : AsSocket {
+pub trait Bind: AsSocket {
     /// Returns the socket address of the local half of this SRT connection.
     fn local_addr(&self) -> io::Result<SocketAddr> {
         self.as_socket().socket_addr()
     }
 }
 
-pub trait Connect : Bind {
+pub trait Connect: Bind {
     /// Returns the socket address of the remote peer of this SRT connection.
     fn peer_addr(&self) -> io::Result<SocketAddr> {
         self.as_socket().peer_addr()
@@ -168,7 +168,9 @@ impl Write for OutputStream {
         self.0.send_vectored(bufs)
     }
 
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 impl Write for &OutputStream {
@@ -180,7 +182,9 @@ impl Write for &OutputStream {
         self.0.send_vectored(bufs)
     }
 
-    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 impl fmt::Debug for OutputStream {
@@ -264,23 +268,35 @@ impl Poll {
     }
 
     /// Register an `AsSocket` instance with the `Poll` instance.
-    pub fn register<S: AsSocket>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
-    where S: AsSocket
+    pub fn register<S: AsSocket>(
+        &self,
+        socket: &S,
+        token: Token,
+        event: EventKind,
+    ) -> io::Result<()>
+    where
+        S: AsSocket,
     {
         self.poll.register(socket.as_socket(), token, event)
     }
 
-
     /// Re-register an `AsSocket` instance with the `Poll` instance.
-    pub fn reregister<S: AsSocket>(&self, socket: &S, token: Token, event: EventKind) -> io::Result<()>
-    where S: AsSocket
+    pub fn reregister<S: AsSocket>(
+        &self,
+        socket: &S,
+        token: Token,
+        event: EventKind,
+    ) -> io::Result<()>
+    where
+        S: AsSocket,
     {
         self.poll.reregister(socket.as_socket(), token, event)
     }
 
     /// Deregister an `AsSocket` instance with the `Poll` instance.
     pub fn deregister<S: AsSocket>(&self, socket: &S) -> io::Result<()>
-    where S: AsSocket
+    where
+        S: AsSocket,
     {
         self.poll.deregister(socket.as_socket())
     }

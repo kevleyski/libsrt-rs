@@ -1,11 +1,11 @@
+use failure::{self as f, Error};
 use std::io::{self, Write};
 use std::process;
 use std::thread;
 use std::time::Duration;
-use failure::{self as f, Error};
 
-use libsrt_rs::std_srt::{Stream, Connect};
-use libsrt_rs::std_srt::{Poll, Token, EventKind, Events};
+use libsrt_rs::std_srt::{Connect, Stream};
+use libsrt_rs::std_srt::{EventKind, Events, Poll, Token};
 
 fn main() {
     if let Err(err) = run() {

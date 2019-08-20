@@ -148,9 +148,9 @@ pub struct SRT_MSGCTRL {
     msgttl: int,   // TTL for a message, default -1 (delivered always)
     inorder: int, // Whether a message is allowed to supersede partially lost one. Unused in stream and live mode.
     boundary: int, //0:mid pkt, 1(01b):end of frame, 2(11b):complete frame, 3(10b): start of frame
-    srctime: u64,   // source timestamp (usec), 0: use internal time
-    pktseq: i32,    // sequence number of the first packet in received message (unused for sending)
-    msgno: i32,     // message number (output value for both sending and receiving)
+    srctime: u64, // source timestamp (usec), 0: use internal time
+    pktseq: i32,  // sequence number of the first packet in received message (unused for sending)
+    msgno: i32,   // message number (output value for both sending and receiving)
 }
 
 // You are free to use either of these two methods to set SRT_MSGCTRL object
@@ -204,7 +204,7 @@ pub fn srt_errorkind(errcode: int) -> std::io::ErrorKind {
             2 => std::io::ErrorKind::WouldBlock,
             3 => std::io::ErrorKind::TimedOut,
             _ => std::io::ErrorKind::WouldBlock, // XXX
-        }
+        },
         _ => std::io::ErrorKind::Other,
     }
 }
@@ -230,10 +230,10 @@ extern "C" {
 
 #[repr(C)]
 pub enum SRT_EPOLL_OPT {
-   SRT_EPOLL_OPT_NONE = 0x0, // fallback
-   SRT_EPOLL_IN = 0x1,
-   SRT_EPOLL_OUT = 0x4,
-   SRT_EPOLL_ERR = 0x8,
+    SRT_EPOLL_OPT_NONE = 0x0, // fallback
+    SRT_EPOLL_IN = 0x1,
+    SRT_EPOLL_OUT = 0x4,
+    SRT_EPOLL_ERR = 0x8,
 }
 
 extern "C" {

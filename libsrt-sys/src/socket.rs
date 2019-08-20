@@ -1,13 +1,16 @@
+use std::ffi::CStr;
 use std::io::{self, IoSlice, IoSliceMut};
 use std::mem;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-use std::ffi::CStr;
 
-use libc::{self as c, c_char, c_int as int, sockaddr, sockaddr_storage, sockaddr_in, sockaddr_in6, socklen_t};
+use libc::{
+    self as c, c_char, c_int as int, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
+    socklen_t,
+};
 
 use crate::error as err;
+pub use crate::ffi::SRT_SOCKSTATUS;
 use crate::ffi::{self, SRTSOCKET};
-pub use crate::ffi::{SRT_SOCKSTATUS};
 
 pub struct Socket(SRTSOCKET);
 
@@ -67,23 +70,16 @@ impl Socket {
     }
 
     pub fn peer_addr(&self) -> io::Result<SocketAddr> {
-        sockname(|buf, len| unsafe {
-            ffi::srt_getpeername(self.0, buf, len as *mut _)
-        })
+        sockname(|buf, len| unsafe { ffi::srt_getpeername(self.0, buf, len as *mut _) })
     }
 
     pub fn socket_addr(&self) -> io::Result<SocketAddr> {
-        sockname(|buf, len| unsafe {
-            ffi::srt_getsockname(self.0, buf, len as *mut _)
-        })
+        sockname(|buf, len| unsafe { ffi::srt_getsockname(self.0, buf, len as *mut _) })
     }
 
     pub fn recv(&self, buf: &mut [u8]) -> io::Result<usize> {
         let ret = err::cvt(unsafe {
-            ffi::srt_recvmsg(
-                self.0,
-                buf.as_mut_ptr() as *mut c_char,
-                buf.len() as int)
+            ffi::srt_recvmsg(self.0, buf.as_mut_ptr() as *mut c_char, buf.len() as int)
         })?;
         Ok(ret as usize)
     }
@@ -94,10 +90,7 @@ impl Socket {
 
     pub fn send(&self, buf: &[u8]) -> io::Result<usize> {
         let ret = err::cvt(unsafe {
-            ffi::srt_sendmsg(
-                self.0,
-                buf.as_ptr() as *const c_char,
-                buf.len() as int)
+            ffi::srt_sendmsg(self.0, buf.as_ptr() as *const c_char, buf.len() as int)
         })?;
         Ok(ret as usize)
     }
@@ -107,27 +100,29 @@ impl Socket {
     }
 
     pub fn set_recv_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (! nonblocking) as int;
+        let mut blocking = (!nonblocking) as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
                 ffi::SRT_SOCKOPT::SRTO_RCVSYN,
                 &mut blocking as *mut _ as *mut _,
-                mem::size_of::<int>() as int)
+                mem::size_of::<int>() as int,
+            )
         })?;
         Ok(())
     }
 
     pub fn set_send_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (! nonblocking) as int;
+        let mut blocking = (!nonblocking) as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
                 ffi::SRT_SOCKOPT::SRTO_SNDSYN,
                 &mut blocking as *mut _ as *mut _,
-                mem::size_of::<int>() as int)
+                mem::size_of::<int>() as int,
+            )
         })?;
         Ok(())
     }
@@ -159,14 +154,8 @@ impl Drop for Socket {
 // XXX copied from libstd::net::addr
 pub fn into_sockaddr(addr: &SocketAddr) -> (*const sockaddr, socklen_t) {
     match *addr {
-        SocketAddr::V4(ref a) => (
-            a as *const _ as *const _,
-            mem::size_of_val(a) as socklen_t,
-        ),
-        SocketAddr::V6(ref a) => (
-            a as *const _ as *const _,
-            mem::size_of_val(a) as socklen_t,
-        ),
+        SocketAddr::V4(ref a) => (a as *const _ as *const _, mem::size_of_val(a) as socklen_t),
+        SocketAddr::V6(ref a) => (a as *const _ as *const _, mem::size_of_val(a) as socklen_t),
     }
 }
 
@@ -197,13 +186,17 @@ pub fn from_sockaddr(storage: &sockaddr_storage, len: socklen_t) -> io::Result<S
                 unsafe { (*(storage as *const _ as *const sockaddr_in6)).sin6_scope_id },
             )))
         }
-        _ => Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid argument",)),
+        _ => Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid argument",
+        )),
     }
 }
 
 // XXX copied from libstd::sys-common::net
 pub fn sockname<F>(f: F) -> io::Result<SocketAddr>
-    where F: FnOnce(*mut sockaddr, *mut socklen_t) -> int
+where
+    F: FnOnce(*mut sockaddr, *mut socklen_t) -> int,
 {
     unsafe {
         let mut storage: sockaddr_storage = mem::zeroed();
