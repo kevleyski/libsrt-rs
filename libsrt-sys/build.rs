@@ -19,11 +19,13 @@ fn main() {
             .status();
     }
 
-    let dst = cmake::Config::new("srt")
+    let mut dst = cmake::Config::new("srt")
         .define("ENABLE_SHARED", "OFF")
         .define("ENABLE_APPS", "OFF")
         .build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
     println!("cargo:rustc-link-lib=static=srt");
+    println!("cargo:rustc-link-lib=stdc++");
+    println!("cargo:rustc-link-lib=crypto");
 }
