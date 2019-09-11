@@ -31,12 +31,9 @@ fn main() {
         let output_str = String::from_utf8_lossy(&output.stdout);
         let trimmed_str = output_str.trim();
 
-        cmk.cflag(format!(r#"-DOPENSSL_ROOT_DIR={}"#,
-                          trimmed_str.to_string()));
-        cmk.cflag(format!(r#"-DOPENSSL_LIB_DIR={}"#,
-                          format!("{}/lib", trimmed_str)));
-        cmk.cflag(format!(r#"-DOPENSSL_INCLUDE_DIR={}"#,
-                          format!("{}/include", trimmed_str)));
+        env::set_var("OPENSSL_ROOT_DIR", trimmed_str.to_string());
+        env::set_var("OPENSSL_LIB_DIR", format!("{}/lib", trimmed_str));
+        env::set_var("OPENSSL_INCLUDE_DIR", format!("{}/include", trimmed_str));
 
         println!("cargo:rustc-link-search=native={}/lib", trimmed_str);
     }
