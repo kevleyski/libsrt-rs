@@ -3,7 +3,7 @@ name = "libsrt-sys"
 version = "0.2.0"
 authors = ["Ian Jun <ian@mykoon.com>"]
 keywords = ["srt", "protocol", "multimedia", "ffi"]
-categories = ["External FFI bindings", "Multimedia", "Network programming"]
+categories = ["external-ffi-bindings", "multimedia", "network-programming"]
 edition = "2018"
 
 [dependencies]

@@ -8,7 +8,7 @@ description = """
 Rust binding of the reference implementation of SRT.
 """
 keywords = ["srt", "protocol", "multimedia"]
-categories = ["API bindings", "Multimedia", "Network programming"]
+categories = ["api-bindings", "Multimedia", "network-programming"]
 edition = "2018"
 
 [dependencies]
