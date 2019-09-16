@@ -1,7 +1,9 @@
 [package]
 name = "libsrt-sys"
 version = "0.2.0"
-authors = ["Byungwan Jun <unipro.kr@gmail.com>"]
+authors = ["Ian Jun <ian@mykoon.com>"]
+keywords = ["srt", "protocol", "multimedia", "ffi"]
+categories = ["External FFI bindings", "Multimedia", "Network programming"]
 edition = "2018"
 
 [dependencies]

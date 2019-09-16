@@ -1,9 +1,14 @@
 [package]
 name = "libsrt-rs"
 version = "0.2.0"
+license = "MPL-2.0"
 readme = "README.md"
-keywords = ["srt", "video", "audio"]
-authors = ["Byungwan Jun <unipro.kr@gmail.com>"]
+authors = ["Ian Jun <ian@mykoon.com>"]
+description = """
+Rust binding of the reference implementation of SRT.
+"""
+keywords = ["srt", "protocol", "multimedia"]
+categories = ["API bindings", "Multimedia", "Network programming"]
 edition = "2018"
 
 [dependencies]
