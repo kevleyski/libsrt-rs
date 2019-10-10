@@ -7,8 +7,8 @@ use slab::Slab;
 
 use failure::{self as f, Error};
 
-use libsrt_rs::std_srt::{AsSocket, Bind, Connect, Listener};
-use libsrt_rs::std_srt::{EventKind, Events, Poll, Token};
+use libsrt_rs::net::{AsSocket, Bind, Connect, Listener};
+use libsrt_rs::net::{EventKind, Events, Poll, Token};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 

@@ -4,8 +4,8 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
-use libsrt_rs::std_srt::{Connect, Stream};
-use libsrt_rs::std_srt::{EventKind, Events, Poll, Token};
+use libsrt_rs::net::{Connect, Stream};
+use libsrt_rs::net::{EventKind, Events, Poll, Token};
 
 fn main() {
     if let Err(err) = run() {
