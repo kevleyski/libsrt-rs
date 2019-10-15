@@ -12,6 +12,7 @@ use crate::error as err;
 pub use crate::ffi::SRT_SOCKSTATUS;
 use crate::ffi::{self, SRTSOCKET};
 
+#[derive(Debug)]
 pub struct Socket(SRTSOCKET);
 
 impl Socket {
@@ -166,11 +167,13 @@ pub fn from_sockaddr(storage: &sockaddr_storage, len: socklen_t) -> io::Result<S
             assert!(len as usize >= mem::size_of::<sockaddr_in>());
             Ok(SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::from(unsafe {
-                    (*(storage as *const _ as *const sockaddr_in))
-                        .sin_addr
-                        .s_addr as u32
+                    ntoh((*(storage as *const _ as *const sockaddr_in))
+                         .sin_addr
+                         .s_addr as u32)
                 }),
-                unsafe { (*(storage as *const _ as *const sockaddr_in)).sin_port },
+                unsafe {
+                    ntoh((*(storage as *const _ as *const sockaddr_in)).sin_port)
+                },
             )))
         }
         c::AF_INET6 => {
@@ -181,9 +184,15 @@ pub fn from_sockaddr(storage: &sockaddr_storage, len: socklen_t) -> io::Result<S
                         .sin6_addr
                         .s6_addr
                 }),
-                unsafe { (*(storage as *const _ as *const sockaddr_in6)).sin6_port },
-                unsafe { (*(storage as *const _ as *const sockaddr_in6)).sin6_flowinfo },
-                unsafe { (*(storage as *const _ as *const sockaddr_in6)).sin6_scope_id },
+                unsafe {
+                    ntoh((*(storage as *const _ as *const sockaddr_in6)).sin6_port)
+                },
+                unsafe {
+                    ntoh((*(storage as *const _ as *const sockaddr_in6)).sin6_flowinfo)
+                },
+                unsafe {
+                    ntoh((*(storage as *const _ as *const sockaddr_in6)).sin6_scope_id)
+                },
             )))
         }
         _ => Err(io::Error::new(
@@ -203,5 +212,44 @@ where
         let mut len = mem::size_of_val(&storage) as socklen_t;
         err::cvt(f(&mut storage as *mut _ as *mut _, &mut len))?;
         from_sockaddr(&storage, len)
+    }
+}
+
+// XXX copied from libstd::net::addr
+#[doc(hidden)]
+trait NetInt {
+    fn from_be(i: Self) -> Self;
+    fn to_be(&self) -> Self;
+}
+macro_rules! doit {
+    ($($t:ident)*) => ($(impl NetInt for $t {
+        fn from_be(i: Self) -> Self { <$t>::from_be(i) }
+        fn to_be(&self) -> Self { <$t>::to_be(*self) }
+    })*)
+}
+doit! { i8 i16 i32 i64 isize u8 u16 u32 u64 usize }
+
+// fn hton<I: NetInt>(i: I) -> I { i.to_be() }
+fn ntoh<I: NetInt>(i: I) -> I { I::from_be(i) }
+
+#[cfg(test)]
+mod socket_tests {
+    use super::*;
+
+    #[test]
+    fn test_sockaddr() {
+        let addr = "192.168.128.64:12345".parse().unwrap();
+        let (addrp, len) = into_sockaddr(&addr);
+        let result = unsafe {
+            from_sockaddr(&*(addrp as *const _ as *const _), len).unwrap()
+        };
+        assert_eq!(addr, result);
+
+        let addr_v6 = "[2001:db8:85a3:0:0:8a2e:370:7334]:23456".parse().unwrap();
+        let (addrp_v6, len_v6) = into_sockaddr(&addr_v6);
+        let result_v6 = unsafe {
+            from_sockaddr(&*(addrp_v6 as *const _ as *const _), len_v6).unwrap()
+        };
+        assert_eq!(addr_v6, result_v6);
     }
 }
