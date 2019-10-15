@@ -4,7 +4,8 @@ use std::process;
 use std::thread;
 use std::time::Duration;
 
-use libsrt_rs::net::{Connect, Stream};
+use libsrt_rs::net::Builder;
+use libsrt_rs::net::Connect;
 use libsrt_rs::net::{EventKind, Events, Poll, Token};
 
 fn main() {
@@ -26,7 +27,9 @@ fn run() -> Result<(), Error> {
     let mut events = Events::with_capacity(2);
 
     let addr = args[0].parse()?;
-    let stream = Stream::connect(&addr)?;
+    let stream = Builder::new()
+        .nonblocking(true)
+        .connect(&addr)?;
 
     poll.register(&stream, TOKEN, EventKind::writable())?;
     poll.poll(&mut events, Some(Duration::from_millis(1000)))?;

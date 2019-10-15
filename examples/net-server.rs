@@ -7,6 +7,7 @@ use slab::Slab;
 
 use failure::{self as f, Error};
 
+use libsrt_rs::net::Builder;
 use libsrt_rs::net::{Bind, Connect, Listener, InputStream};
 use libsrt_rs::net::{EventKind, Events, Poll, Token};
 
@@ -35,7 +36,9 @@ fn run() -> Result<(), Error> {
     }
 
     let addr = args[0].parse()?;
-    let listener = Listener::bind(&addr)?;
+    let listener = Builder::new()
+        .nonblocking(true)
+        .bind(&addr)?;
     println!("listening on {}", listener.local_addr()?);
 
     let poll = Poll::new()?;
@@ -50,7 +53,7 @@ fn run() -> Result<(), Error> {
     let mut connections = Slab::with_capacity(MAX_CONNECTIONS);
 
     // The main event loop
-    'outer: loop {
+    loop {
         events.clear();
 
         // Wait for events
@@ -131,7 +134,6 @@ fn read(connections: &mut Slab<Connection>, index: usize, poll: &Poll) -> Result
                     len,
                     str::from_utf8(&buf[0..*len])?
                 );
-                break;
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // Socket is not ready anymore, stop reading

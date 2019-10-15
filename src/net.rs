@@ -10,6 +10,10 @@ pub use libsrt_sys::{EventKind, Events, Token};
 pub trait AsSocket {
     /// Returns the internal socket.
     fn as_socket(&self) -> &Socket;
+
+    fn take_error(&self) -> io::Result<Option<io::Error>> {
+        self.as_socket().take_error()
+    }
 }
 
 pub trait Bind: AsSocket {
@@ -27,53 +31,100 @@ pub trait Connect: Bind {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// SRT streams
+// SRT builder
 ////////////////////////////////////////////////////////////////////////////////
 
-/// A SRT stream between a local and a remote socket.
-pub struct Stream(Socket);
+/// Builder struct for a SRT instance
+pub struct Builder {
+    nonblocking: bool,
+}
 
-impl Stream {
+impl Builder {
+    pub fn new() -> Self {
+        Builder {
+            nonblocking: false,
+        }
+    }
+
+    /// Moves this SRT instance into or out of nonblocking mode.
+    pub fn nonblocking(mut self, nonblocking: bool) -> Self {
+        self.nonblocking = nonblocking;
+        self
+    }
+
     /// Opens a SRT connection to a remote host.
-    pub fn connect(addr: &SocketAddr) -> io::Result<Stream> {
+    pub fn connect(&self, addr: &SocketAddr) -> io::Result<Stream> {
         sys::init();
 
         let sock = Socket::new(addr)?;
 
-        sock.set_send_nonblocking(true)?;
-        match sock.connect(addr) {
-            Ok(_) => {}
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-            Err(e) => return Err(e),
+        if self.nonblocking {
+            sock.set_send_nonblocking(true)?;
+            match sock.connect(addr) {
+                Ok(_) => {}
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
+                Err(e) => return Err(e),
+            }
+        } else {
+            sock.connect(addr)?;
         }
 
-        Ok(Stream(sock))
+        Ok(Stream {
+            sock: sock,
+            nonblocking: self.nonblocking,
+        })
     }
 
-    /// Creates a new `Stream` from the pending socket.
-    pub fn from_stream(sock: Socket) -> io::Result<Stream> {
-        sock.set_recv_nonblocking(true)?;
-        Ok(Stream(sock))
-    }
+    /// Creates a new `Listener` which will be bound to the specified
+    /// address.
+    pub fn bind(&self, addr: &SocketAddr) -> io::Result<Listener> {
+        sys::init();
 
+        let sock = Socket::new(addr)?;
+        sock.bind(addr)?;
+        sock.listen(128)?;
+
+        if self.nonblocking {
+            sock.set_recv_nonblocking(true)?;
+        }
+
+        Ok(Listener {
+            sock: sock,
+            nonblocking: self.nonblocking,
+        })
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+// SRT streams
+////////////////////////////////////////////////////////////////////////////////
+
+/// A SRT stream between a local and a remote socket.
+pub struct Stream {
+    sock: Socket,
+    nonblocking: bool,
+}
+
+impl Stream {
     pub fn input_stream(self) -> io::Result<InputStream> {
-        self.0.set_recv_nonblocking(true)?;
-        Ok(InputStream(self.0))
+        if self.nonblocking {
+            self.sock.set_recv_nonblocking(true)?;
+        }
+        Ok(InputStream { sock: self.sock })
     }
 
     pub fn output_stream(self) -> io::Result<OutputStream> {
-        self.0.set_send_nonblocking(true)?;
-        Ok(OutputStream(self.0))
-    }
-
-    pub fn take_error(&self) -> io::Result<Option<io::Error>> {
-        self.0.take_error()
+        if self.nonblocking {
+            self.sock.set_send_nonblocking(true)?;
+        }
+        Ok(OutputStream { sock: self.sock })
     }
 }
 
 impl AsSocket for Stream {
     fn as_socket(&self) -> &Socket {
-        &self.0
+        &self.sock
     }
 }
 
@@ -98,11 +149,13 @@ impl fmt::Debug for Stream {
 }
 
 /// A SRT input stream between a local and a remote socket.
-pub struct InputStream(Socket);
+pub struct InputStream {
+    sock: Socket,
+}
 
 impl AsSocket for InputStream {
     fn as_socket(&self) -> &Socket {
-        &self.0
+        &self.sock
     }
 }
 
@@ -112,21 +165,21 @@ impl Connect for InputStream {}
 
 impl Read for InputStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.recv(buf)
+        self.sock.recv(buf)
     }
 
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        self.0.recv_vectored(bufs)
+        self.sock.recv_vectored(bufs)
     }
 }
 
 impl Read for &InputStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.0.recv(buf)
+        self.sock.recv(buf)
     }
 
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        self.0.recv_vectored(bufs)
+        self.sock.recv_vectored(bufs)
     }
 }
 
@@ -147,11 +200,13 @@ impl fmt::Debug for InputStream {
 }
 
 /// A SRT output stream between a local and a remote socket.
-pub struct OutputStream(Socket);
+pub struct OutputStream {
+    sock: Socket,
+}
 
 impl AsSocket for OutputStream {
     fn as_socket(&self) -> &Socket {
-        &self.0
+        &self.sock
     }
 }
 
@@ -161,11 +216,11 @@ impl Connect for OutputStream {}
 
 impl Write for OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.send(buf)
+        self.sock.send(buf)
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        self.0.send_vectored(bufs)
+        self.sock.send_vectored(bufs)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -175,11 +230,11 @@ impl Write for OutputStream {
 
 impl Write for &OutputStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.0.send(buf)
+        self.sock.send(buf)
     }
 
     fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        self.0.send_vectored(bufs)
+        self.sock.send_vectored(bufs)
     }
 
     fn flush(&mut self) -> io::Result<()> {
@@ -208,31 +263,26 @@ impl fmt::Debug for OutputStream {
 ////////////////////////////////////////////////////////////////////////////////
 
 /// A SRT input socket server, listening for connections.
-pub struct Listener(Socket);
+pub struct Listener {
+    sock: Socket,
+    nonblocking: bool,
+}
 
 impl Listener {
-    /// Creates a new `Listener` which will be bound to the specified
-    /// address.
-    pub fn bind(addr: &SocketAddr) -> io::Result<Listener> {
-        sys::init();
-
-        let sock = Socket::new(addr)?;
-        sock.bind(addr)?;
-        sock.listen(128)?;
-        sock.set_recv_nonblocking(true)?;
-        Ok(Listener(sock))
-    }
-
     /// Accept a new incoming connection from this listener.
     pub fn accept(&self) -> io::Result<(Stream, SocketAddr)> {
         let (sock, addr) = self.as_socket().accept()?;
-        Ok((Stream::from_stream(sock)?, addr))
+        if self.nonblocking {
+            sock.set_recv_nonblocking(true)?;
+        }
+        Ok((Stream {sock: sock, nonblocking: self.nonblocking},
+            addr))
     }
 }
 
 impl AsSocket for Listener {
     fn as_socket(&self) -> &Socket {
-        &self.0
+        &self.sock
     }
 }
 
