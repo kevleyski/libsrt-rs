@@ -60,6 +60,7 @@ impl Builder {
 
         if self.nonblocking {
             sock.set_send_nonblocking(true)?;
+            sock.set_recv_nonblocking(true)?;
             match sock.connect(addr) {
                 Ok(_) => {}
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
@@ -69,10 +70,7 @@ impl Builder {
             sock.connect(addr)?;
         }
 
-        Ok(Stream {
-            sock: sock,
-            nonblocking: self.nonblocking,
-        })
+        Ok(Stream { sock: sock })
     }
 
     /// Creates a new `Listener` which will be bound to the specified
@@ -88,10 +86,17 @@ impl Builder {
             sock.set_recv_nonblocking(true)?;
         }
 
-        Ok(Listener {
-            sock: sock,
-            nonblocking: self.nonblocking,
-        })
+        Ok(Listener { sock: sock })
+    }
+
+    /// Accept a new incoming connection
+    pub fn accept(&self, stream: Stream) -> io::Result<Stream> {
+        if self.nonblocking {
+            stream.sock.set_send_nonblocking(true)?;
+            stream.sock.set_recv_nonblocking(true)?;
+        }
+
+        Ok(stream)
     }
 }
 
@@ -103,23 +108,6 @@ impl Builder {
 /// A SRT stream between a local and a remote socket.
 pub struct Stream {
     sock: Socket,
-    nonblocking: bool,
-}
-
-impl Stream {
-    pub fn input_stream(self) -> io::Result<InputStream> {
-        if self.nonblocking {
-            self.sock.set_recv_nonblocking(true)?;
-        }
-        Ok(InputStream { sock: self.sock })
-    }
-
-    pub fn output_stream(self) -> io::Result<OutputStream> {
-        if self.nonblocking {
-            self.sock.set_send_nonblocking(true)?;
-        }
-        Ok(OutputStream { sock: self.sock })
-    }
 }
 
 impl AsSocket for Stream {
@@ -132,119 +120,57 @@ impl Bind for Stream {}
 
 impl Connect for Stream {}
 
+impl Read for Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.sock.recv(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.sock.recv_vectored(bufs)
+    }
+}
+
+impl Read for &Stream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.sock.recv(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        self.sock.recv_vectored(bufs)
+    }
+}
+
+impl Write for Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.sock.send(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        self.sock.send_vectored(bufs)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Write for &Stream {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.sock.send(buf)
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        self.sock.send_vectored(bufs)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 impl fmt::Debug for Stream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut res = f.debug_struct("Stream");
-
-        if let Ok(addr) = self.local_addr() {
-            res.field("local", &addr);
-        }
-
-        if let Ok(peer) = self.peer_addr() {
-            res.field("peer", &peer);
-        }
-
-        res.finish()
-    }
-}
-
-/// A SRT input stream between a local and a remote socket.
-pub struct InputStream {
-    sock: Socket,
-}
-
-impl AsSocket for InputStream {
-    fn as_socket(&self) -> &Socket {
-        &self.sock
-    }
-}
-
-impl Bind for InputStream {}
-
-impl Connect for InputStream {}
-
-impl Read for InputStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.sock.recv(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        self.sock.recv_vectored(bufs)
-    }
-}
-
-impl Read for &InputStream {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.sock.recv(buf)
-    }
-
-    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
-        self.sock.recv_vectored(bufs)
-    }
-}
-
-impl fmt::Debug for InputStream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("InputStream");
-
-        if let Ok(addr) = self.local_addr() {
-            res.field("local", &addr);
-        }
-
-        if let Ok(peer) = self.peer_addr() {
-            res.field("peer", &peer);
-        }
-
-        res.finish()
-    }
-}
-
-/// A SRT output stream between a local and a remote socket.
-pub struct OutputStream {
-    sock: Socket,
-}
-
-impl AsSocket for OutputStream {
-    fn as_socket(&self) -> &Socket {
-        &self.sock
-    }
-}
-
-impl Bind for OutputStream {}
-
-impl Connect for OutputStream {}
-
-impl Write for OutputStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sock.send(buf)
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        self.sock.send_vectored(bufs)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl Write for &OutputStream {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.sock.send(buf)
-    }
-
-    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
-        self.sock.send_vectored(bufs)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl fmt::Debug for OutputStream {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut res = f.debug_struct("OutputStream");
 
         if let Ok(addr) = self.local_addr() {
             res.field("local", &addr);
@@ -264,19 +190,14 @@ impl fmt::Debug for OutputStream {
 
 /// A SRT input socket server, listening for connections.
 pub struct Listener {
-    sock: Socket,
-    nonblocking: bool,
+    sock: Socket
 }
 
 impl Listener {
     /// Accept a new incoming connection from this listener.
     pub fn accept(&self) -> io::Result<(Stream, SocketAddr)> {
         let (sock, addr) = self.as_socket().accept()?;
-        if self.nonblocking {
-            sock.set_recv_nonblocking(true)?;
-        }
-        Ok((Stream {sock: sock, nonblocking: self.nonblocking},
-            addr))
+        Ok((Stream { sock: sock }, addr))
     }
 }
 

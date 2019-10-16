@@ -27,7 +27,7 @@ fn run() -> Result<(), Error> {
     let mut events = Events::with_capacity(2);
 
     let addr = args[0].parse()?;
-    let stream = Builder::new()
+    let mut stream = Builder::new()
         .nonblocking(true)
         .connect(&addr)?;
 
@@ -36,12 +36,9 @@ fn run() -> Result<(), Error> {
     if events.iter().next().is_none() {
         return Err(io::Error::new(io::ErrorKind::TimedOut, "connection timeout").into());
     }
-    poll.deregister(&stream)?;
-
     println!("connection established to {}", stream.peer_addr()?);
-    let mut output = stream.output_stream()?;
 
-    poll.reregister(&output, TOKEN, EventKind::writable() | EventKind::error())?;
+    poll.reregister(&stream, TOKEN, EventKind::writable() | EventKind::error())?;
 
     let message = format!("This message should be sent to the other side");
     'outer: for i in 0..100 {
@@ -65,7 +62,7 @@ fn run() -> Result<(), Error> {
                 }
             }
 
-            match output.write(&message.as_bytes()[_nsent..]) {
+            match stream.write(&message.as_bytes()[_nsent..]) {
                 Ok(len) => {
                     _nsent += len;
                     if _nsent == message.len() {
@@ -85,11 +82,11 @@ fn run() -> Result<(), Error> {
 
     // XXX To avoid the error message:
     // SRT:RcvQ:worker!!FATAL!!:SRT.c: CChannel reported ERROR DURING TRANSMISSION - IPE. INTERRUPTING worker anyway.
-    poll.reregister(&output, TOKEN, EventKind::error())?;
+    poll.reregister(&stream, TOKEN, EventKind::error())?;
     events.clear();
     poll.poll(&mut events, Some(Duration::from_millis(1000)))?;
 
-    poll.deregister(&output)?;
+    poll.deregister(&stream)?;
 
     Ok(())
 }

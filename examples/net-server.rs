@@ -8,7 +8,7 @@ use slab::Slab;
 use failure::{self as f, Error};
 
 use libsrt_rs::net::Builder;
-use libsrt_rs::net::{Bind, Connect, Listener, InputStream};
+use libsrt_rs::net::{Bind, Connect, Listener, Stream};
 use libsrt_rs::net::{EventKind, Events, Poll, Token};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
@@ -23,7 +23,7 @@ fn main() {
 }
 
 struct Connection {
-    sock: InputStream,
+    sock: Stream,
     peer_addr: SocketAddr,
 }
 
@@ -91,8 +91,11 @@ fn accept(listener: &Listener, connections: &mut Slab<Connection>, poll: &Poll) 
         match listener.accept() {
             Ok((stream, peer_addr)) => {
                 println!("connection established from {}", peer_addr);
+                let stream = Builder::new()
+                    .nonblocking(true)
+                    .accept(stream)?;
                 let index = connections.insert(Connection {
-                    sock: stream.input_stream()?,
+                    sock: stream,
                     peer_addr: peer_addr,
                 });
                 poll.register(
