@@ -10,7 +10,7 @@ use libsrt_rs::net::{Poll, Token, Events, EventKind};
 static MESSAGE: &str = "foo bar baz";
 
 #[test]
-fn sync_echo() {
+fn net_sync_echo() {
     let try_addr = "127.0.0.1:0".parse().unwrap();
     let server = Builder::new().bind(&try_addr).unwrap();
     let addr = server.local_addr().unwrap();
@@ -60,7 +60,7 @@ fn sync_echo() {
 }
 
 #[test]
-fn async_echo() {
+fn net_async_echo() {
     let try_addr = "127.0.0.1:0".parse().unwrap();
     let server = Builder::new().nonblocking(true).bind(&try_addr).unwrap();
     let addr = server.local_addr().unwrap();
@@ -69,66 +69,65 @@ fn async_echo() {
         const TOKEN: Token = Token(0);
 
         let poll = Poll::new().unwrap();
-        let mut events = Events::with_capacity(1);
+        let mut events = Events::with_capacity(2);
 
-        let mut stream = Builder::new().nonblocking(true).connect(&addr).unwrap();
+        let mut stream = Builder::new().nonblocking(true).connect(&addr)
+            .unwrap();
         poll.register(&stream, TOKEN, EventKind::writable()).unwrap();
         poll.poll(&mut events, Some(Duration::from_millis(1000))).unwrap();
         assert!(events.iter().next().is_some());
 
-        poll.reregister(&stream, TOKEN, EventKind::writable() | EventKind::error()).unwrap();
+        poll.reregister(&stream, TOKEN,
+                        EventKind::readable() | EventKind::error())
+            .unwrap();
         let msg_bytes = MESSAGE.as_bytes();
-        let mut nsent = 0;
-        loop {
-            events.clear();
-            poll.poll(&mut events, None).unwrap();
-            let event = events.iter().next().unwrap();
-            assert_eq!(event.token(), TOKEN);
-            assert!(! event.kind().is_error());
-
-            match stream.write(&msg_bytes[nsent..]) {
-                Ok(len) => {
-                    nsent += len;
-                    if nsent == msg_bytes.len() {
-                        break;
-                    }
-                }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    continue;
-                }
-                Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
-            }
-        }
-
-        let mut buf = [0; 2048];
+        let mut read_buf = [0; 2048];
         let mut nread = 0;
-
-        poll.reregister(&stream, TOKEN, EventKind::readable()).unwrap();
-        loop {
+        let mut nsent = 0;
+        'outer: while nread < msg_bytes.len() {
             events.clear();
-            poll.poll(&mut events, None).unwrap();
-            let event = events.iter().next().unwrap();
-            assert_eq!(event.token(), TOKEN);
-            assert!(event.kind().is_readable());
-            match stream.read(&mut buf) {
-                Ok(0) => {
-                    break;
-                }
-                Ok(ref len) => {
-                    nread = nread + len;
-                    if nread == msg_bytes.len() {
-                        break;
+            poll.poll(&mut events, Some(Duration::from_millis(100))).unwrap();
+
+            for event in &events {
+                assert_eq!(event.token(), TOKEN);
+                assert!(! event.kind().is_error());
+
+                if event.kind().is_readable() {
+                    while nread < nsent {
+                        match stream.read(&mut read_buf) {
+                            Ok(0) => {
+                                break 'outer;
+                            }
+                            Ok(ref len) => {
+                                nread = nread + len;
+                            }
+                            Err(ref e)
+                                if e.kind() == io::ErrorKind::WouldBlock =>
+                            {
+                                break;
+                            }
+                            Err(e) => panic!("{} failed with {:?}",
+                                             stringify!($e), e),
+                        }
                     }
                 }
-                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                    continue;
+            }
+
+            while nsent < msg_bytes.len() {
+                match stream.write(&msg_bytes[nsent..]) {
+                    Ok(len) => {
+                        nsent += len;
+                    }
+                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        break;
+                    }
+                    Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
                 }
-                Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
             }
         }
 
         assert_eq!(nread, 11);
-        assert_eq!(MESSAGE, str::from_utf8(&buf[0..nread]).unwrap());
+        assert_eq!(MESSAGE, str::from_utf8(&read_buf[0..nread]).unwrap());
     });
 
     const SERVER_TOKEN: Token = Token(0);
@@ -147,7 +146,9 @@ fn async_echo() {
         assert!(event.kind().is_readable());
         match server.accept() {
             Ok((s, _a)) => {
-                stream = Some(Builder::new().nonblocking(true).accept(s).unwrap());
+                stream = Some(Builder::new()
+                              .nonblocking(true)
+                              .accept(s).unwrap());
                 break;
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -158,58 +159,57 @@ fn async_echo() {
     }
 
     let mut stream = stream.unwrap();
+    poll.reregister(&stream, CLIENT_TOKEN,
+                    EventKind::readable() | EventKind::error())
+        .unwrap();
+
+    let msg_len = MESSAGE.as_bytes().len();
     let mut buf = [0; 2048];
     let mut nread = 0;
+    let mut nsent = 0;
 
-    poll.register(&stream, CLIENT_TOKEN, EventKind::readable()).unwrap();
-    loop {
+    'outer: while nsent < msg_len {
         events.clear();
-        poll.poll(&mut events, None).unwrap();
-        let event = events.iter().next().unwrap();
-        assert_eq!(event.token(), CLIENT_TOKEN);
-        assert!(event.kind().is_readable());
-        match stream.read(&mut buf) {
-            Ok(0) => {
-                break;
-            }
-            Ok(ref len) => {
-                nread = nread + len;
-                if nread == MESSAGE.as_bytes().len() {
-                    break;
+        poll.poll(&mut events, Some(Duration::from_millis(100))).unwrap();
+
+        for event in &events {
+            assert_eq!(event.token(), CLIENT_TOKEN);
+            assert!(! event.kind().is_error());
+
+            if event.kind().is_readable() {
+                while nread < msg_len {
+                    match stream.read(&mut buf) {
+                        Ok(0) => {
+                            break 'outer;
+                        }
+                        Ok(ref len) => {
+                            nread = nread + len;
+                        }
+                        Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                            break;
+                        }
+                        Err(e) => panic!("{} failed with {:?}",
+                                         stringify!($e), e),
+                    }
                 }
             }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                continue;
+        }
+
+        while nsent < nread {
+            match stream.write(&buf[nsent..nread]) {
+                Ok(len) => {
+                    nsent += len;
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    break;
+                }
+                Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
             }
-            Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
         }
     }
 
     assert_eq!(nread, 11);
     assert_eq!(MESSAGE, str::from_utf8(&buf[0..nread]).unwrap());
-
-    poll.reregister(&stream, CLIENT_TOKEN, EventKind::writable() | EventKind::error()).unwrap();
-    let mut nsent = 0;
-    loop {
-        events.clear();
-        poll.poll(&mut events, None).unwrap();
-        let event = events.iter().next().unwrap();
-        assert_eq!(event.token(), CLIENT_TOKEN);
-        assert!(! event.kind().is_error());
-
-        match stream.write(&buf[nsent..nread]) {
-            Ok(len) => {
-                nsent += len;
-                if nsent == nread {
-                    break;
-                }
-            }
-            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                continue;
-            }
-            Err(e) => panic!("{} failed with {:?}", stringify!($e), e),
-        }
-    }
 
     client.join().unwrap();
 }
