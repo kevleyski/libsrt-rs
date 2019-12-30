@@ -4,9 +4,9 @@ mod poll;
 mod socket;
 
 pub fn init() {
-    use std::sync::{Once, ONCE_INIT};
+    use std::sync::Once;
 
-    static INIT: Once = ONCE_INIT;
+    static INIT: Once = Once::new();
 
     INIT.call_once(|| unsafe {
         crate::ffi::srt_startup();

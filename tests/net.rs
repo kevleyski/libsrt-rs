@@ -137,7 +137,7 @@ fn net_async_echo() {
     let mut events = Events::with_capacity(1);
 
     poll.register(&server, SERVER_TOKEN, EventKind::readable()).unwrap();
-    let mut stream: Option<Stream> = None;
+    let mut _stream: Option<Stream> = None;
     loop {
         events.clear();
         poll.poll(&mut events, None).unwrap();
@@ -146,9 +146,9 @@ fn net_async_echo() {
         assert!(event.kind().is_readable());
         match server.accept() {
             Ok((s, _a)) => {
-                stream = Some(Builder::new()
-                              .nonblocking(true)
-                              .accept(s).unwrap());
+                _stream = Some(Builder::new()
+                               .nonblocking(true)
+                               .accept(s).unwrap());
                 break;
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
@@ -158,7 +158,7 @@ fn net_async_echo() {
         }
     }
 
-    let mut stream = stream.unwrap();
+    let mut stream = _stream.unwrap();
     poll.reregister(&stream, CLIENT_TOKEN,
                     EventKind::readable() | EventKind::error())
         .unwrap();
