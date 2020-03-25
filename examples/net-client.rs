@@ -1,5 +1,7 @@
 use failure::{self as f, Error};
+use std::borrow::Cow;
 use std::io::{self, Write};
+use std::path::Path;
 use std::process;
 use std::thread;
 use std::time::Duration;
@@ -18,15 +20,15 @@ fn main() {
 fn run() -> Result<(), Error> {
     const TOKEN: Token = Token(0);
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() < 1 {
-        return Err(f::err_msg("Usage: test-client"));
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        return Err(f::err_msg(format!("Usage: {} IP:PORT", prog_name(&args[0]))));
     }
 
     let poll = Poll::new()?;
     let mut events = Events::with_capacity(2);
 
-    let addr = args[0].parse()?;
+    let addr = args[1].parse()?;
     let mut stream = Builder::new()
         .nonblocking(true)
         .connect(&addr)?;
@@ -89,4 +91,8 @@ fn run() -> Result<(), Error> {
     poll.deregister(&stream)?;
 
     Ok(())
+}
+
+fn prog_name(path: &str) -> Cow<str> {
+    Path::new(path).file_name().unwrap().to_string_lossy()
 }

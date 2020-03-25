@@ -1,5 +1,7 @@
+use std::borrow::Cow;
 use std::io::{self, Read};
 use std::net::SocketAddr;
+use std::path::Path;
 use std::process;
 use std::str;
 
@@ -30,12 +32,12 @@ struct Connection {
 fn run() -> Result<(), Error> {
     const LISTEN_TOKEN: Token = Token(MAX_CONNECTIONS);
 
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    if args.len() < 1 {
-        return Err(f::err_msg("Usage: test-server IP:PORT"));
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        return Err(f::err_msg(format!("Usage: {} IP:PORT", prog_name(&args[0]))));
     }
 
-    let addr = args[0].parse()?;
+    let addr = args[1].parse()?;
     let listener = Builder::new()
         .nonblocking(true)
         .bind(&addr)?;
@@ -153,4 +155,8 @@ fn read(connections: &mut Slab<Connection>, index: usize, poll: &Poll) -> Result
     }
 
     Ok(tot_len)
+}
+
+fn prog_name(path: &str) -> Cow<str> {
+    Path::new(path).file_name().unwrap().to_string_lossy()
 }
