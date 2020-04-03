@@ -22,7 +22,8 @@ fn run() -> Result<(), Error> {
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        return Err(f::err_msg(format!("Usage: {} IP:PORT", prog_name(&args[0]))));
+        return Err(f::err_msg(format!("Usage: {} IP:PORT",
+                                      prog_name(&args[0]))));
     }
 
     let poll = Poll::new()?;
@@ -36,11 +37,13 @@ fn run() -> Result<(), Error> {
     poll.register(&stream, TOKEN, EventKind::writable())?;
     poll.poll(&mut events, Some(Duration::from_millis(1000)))?;
     if events.iter().next().is_none() {
-        return Err(io::Error::new(io::ErrorKind::TimedOut, "connection timeout").into());
+        return Err(io::Error::new(io::ErrorKind::TimedOut,
+                                  "connection timeout").into());
     }
     println!("connection established to {}", stream.peer_addr()?);
 
-    poll.reregister(&stream, TOKEN, EventKind::writable() | EventKind::error())?;
+    poll.reregister(&stream,
+                    TOKEN, EventKind::writable() | EventKind::error())?;
 
     let message = format!("This message should be sent to the other side");
     'outer: for i in 0..100 {

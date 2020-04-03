@@ -34,7 +34,8 @@ fn run() -> Result<(), Error> {
 
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        return Err(f::err_msg(format!("Usage: {} IP:PORT", prog_name(&args[0]))));
+        return Err(f::err_msg(format!("Usage: {} IP:PORT",
+                                      prog_name(&args[0]))));
     }
 
     let addr = args[1].parse()?;
@@ -74,7 +75,8 @@ fn run() -> Result<(), Error> {
                             "srt read from {}...connection closed",
                             connections.get(index).unwrap().peer_addr
                         );
-                        poll.deregister(&connections.get_mut(index).unwrap().sock)?;
+                        poll.deregister(&connections.get_mut(index).unwrap()
+                                        .sock)?;
                         connections.remove(index);
                     } else if kind.is_readable() {
                         read(&mut connections, index, &poll)?;
@@ -85,7 +87,11 @@ fn run() -> Result<(), Error> {
     }
 }
 
-fn accept(listener: &Listener, connections: &mut Slab<Connection>, poll: &Poll) -> Result<(), Error> {
+fn accept(
+    listener: &Listener,
+    connections: &mut Slab<Connection>,
+    poll: &Poll
+) -> Result<(), Error> {
     println!("listener");
     // Perform operations in a loop until `WouldBlock` is
     // encountered.
@@ -115,7 +121,11 @@ fn accept(listener: &Listener, connections: &mut Slab<Connection>, poll: &Poll) 
     }
 }
 
-fn read(connections: &mut Slab<Connection>, index: usize, poll: &Poll) -> Result<usize, Error> {
+fn read(
+    connections: &mut Slab<Connection>,
+    index: usize,
+    poll: &Poll
+) -> Result<usize, Error> {
     let mut buf = [0; DEFAULT_BUF_SIZE];
     let mut tot_len = 0;
     loop {
