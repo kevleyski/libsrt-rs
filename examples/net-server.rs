@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::borrow::Cow;
 use std::io::{self, Read};
 use std::net::SocketAddr;
@@ -5,9 +8,9 @@ use std::path::Path;
 use std::process;
 use std::str;
 
-use slab::Slab;
-
+use bytes::{BytesMut, BufMut};
 use failure::{self as f, Error};
+use slab::Slab;
 
 use libsrt_rs::net::Builder;
 use libsrt_rs::net::{Bind, Connect, Listener, Stream};
@@ -18,10 +21,36 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 const MAX_CONNECTIONS: usize = 1024;
 
 fn main() {
-    if let Err(err) = run() {
+    let args: Vec<String> = std::env::args().collect();
+    let opts = match get_opts(&args) {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("Usage: {} IP:PORT", prog_name(&args[0]));
+            eprintln!("{}", err);
+            process::exit(1);
+        }
+    };
+
+    if let Err(err) = run(opts.addr) {
         eprintln!("{}", err);
         process::exit(1);
     }
+}
+
+struct Options {
+    addr: SocketAddr,
+}
+
+fn get_opts(args: &[String]) -> Result<Options, Error> {
+    if args.len() < 2 {
+        return Err(f::err_msg(format!("no target address")));
+    }
+
+    Ok(Options { addr: args[1].parse()? })
+}
+
+fn prog_name(path: &str) -> Cow<str> {
+    Path::new(path).file_name().unwrap().to_string_lossy()
 }
 
 struct Connection {
@@ -29,20 +58,16 @@ struct Connection {
     peer_addr: SocketAddr,
 }
 
-fn run() -> Result<(), Error> {
+fn run(addr: impl Into<SocketAddr> + 'static) -> Result<(), Error> {
+    env_logger::init()?;
+
     const LISTEN_TOKEN: Token = Token(MAX_CONNECTIONS);
 
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() < 2 {
-        return Err(f::err_msg(format!("Usage: {} IP:PORT",
-                                      prog_name(&args[0]))));
-    }
-
-    let addr = args[1].parse()?;
+    // let addr = args[1].parse()?;
     let listener = Builder::new()
         .nonblocking(true)
-        .bind(&addr)?;
-    println!("listening on {}", listener.local_addr()?);
+        .bind(&addr.into())?;
+    info!("listening on {}", listener.local_addr()?);
 
     let poll = Poll::new()?;
 
@@ -71,7 +96,7 @@ fn run() -> Result<(), Error> {
                     let kind = event.kind();
 
                     if kind.is_error() {
-                        println!(
+                        info!(
                             "srt read from {}...connection closed",
                             connections.get(index).unwrap().peer_addr
                         );
@@ -79,11 +104,26 @@ fn run() -> Result<(), Error> {
                                         .sock)?;
                         connections.remove(index);
                     } else if kind.is_readable() {
-                        read(&mut connections, index, &poll)?;
-                    }
-                }
-            }
-        }
+                        match read(&mut connections, index) {
+                            Ok(msg) => {
+                                info!(
+                                    "srt read from {}...{}",
+                                    connections.get(index).unwrap()
+                                        .sock.peer_addr().unwrap(),
+                                    msg
+                                );
+                            }
+                            Err(e) => {
+                                error!("{}", e);
+                                poll.deregister(&connections
+                                                .get_mut(index).unwrap().sock)?;
+                                connections.remove(index);
+                            }
+                        }
+                    } // kind.is...
+                } // Token(index)
+            } // event.token()
+        } // for event
     }
 }
 
@@ -92,25 +132,31 @@ fn accept(
     connections: &mut Slab<Connection>,
     poll: &Poll
 ) -> Result<(), Error> {
-    println!("listener");
+    trace!("listener");
     // Perform operations in a loop until `WouldBlock` is
     // encountered.
     loop {
         match listener.accept() {
             Ok((stream, peer_addr)) => {
-                println!("connection established from {}", peer_addr);
-                let stream = Builder::new()
-                    .nonblocking(true)
-                    .accept(stream)?;
-                let index = connections.insert(Connection {
-                    sock: stream,
-                    peer_addr: peer_addr,
-                });
-                poll.register(
-                    &connections.get_mut(index).unwrap().sock,
-                    Token(index),
-                    EventKind::readable() | EventKind::error(),
-                )?;
+                if connections.len() < connections.capacity() {
+                    info!("connection established from {}", peer_addr);
+                    let stream = Builder::new()
+                        .nonblocking(true)
+                        .accept(stream)?;
+                    let index = connections.insert(Connection {
+                        sock: stream,
+                        peer_addr: peer_addr,
+                    });
+                    poll.register(
+                        &connections.get_mut(index).unwrap().sock,
+                        Token(index),
+                        EventKind::readable() | EventKind::error(),
+                    )?;
+                } else {
+                    error!("max clients exceeded");
+                    // return Err(f::err_msg(format!("max clients exceeded")));
+                    return Ok(())
+                }
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // Socket is not ready anymore, stop accepting
@@ -124,49 +170,37 @@ fn accept(
 fn read(
     connections: &mut Slab<Connection>,
     index: usize,
-    poll: &Poll
-) -> Result<usize, Error> {
-    let mut buf = [0; DEFAULT_BUF_SIZE];
-    let mut tot_len = 0;
+) -> Result<String, Error> {
+    let mut buf = BytesMut::with_capacity(DEFAULT_BUF_SIZE);
     loop {
-        print!(
-            "srt read from {}...",
-            connections.get(index).unwrap().sock.peer_addr().unwrap()
+        debug!("srt read from {}...",
+              connections.get(index).unwrap().sock.peer_addr().unwrap()
         );
-        match connections.get_mut(index).unwrap().sock.read(&mut buf) {
+        let mut tmp_buf = [0; DEFAULT_BUF_SIZE];
+        match connections.get_mut(index).unwrap().sock.read(&mut tmp_buf) {
             Ok(0) => {
                 // XXX DO NOT WORK
-                // Socket is closed, remove it
-                println!("connection closed");
-                poll.deregister(&connections.get_mut(index).unwrap().sock)?;
-                connections.remove(index);
+                // Socket is closed
+                debug!("closed");
                 break;
             }
             Ok(ref len) => {
-                tot_len = tot_len + len;
-                println!(
-                    "got message of length {} << {}",
-                    len,
-                    str::from_utf8(&buf[0..*len])?
+                buf.put(&tmp_buf[0..*len]);
+                debug!("got message of length {} << {}",
+                      len,
+                      str::from_utf8(&tmp_buf[0..*len])?
                 );
             }
             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
                 // Socket is not ready anymore, stop reading
-                println!("not ready");
+                debug!("not ready");
                 break;
             }
             Err(e) => {
-                println!("error: {}", e);
-                poll.deregister(&connections.get_mut(index).unwrap().sock)?;
-                connections.remove(index);
                 return Err(e.into());
             }
         }
     }
 
-    Ok(tot_len)
-}
-
-fn prog_name(path: &str) -> Cow<str> {
-    Path::new(path).file_name().unwrap().to_string_lossy()
+    Ok(String::from_utf8(buf.to_vec())?)
 }
