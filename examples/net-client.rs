@@ -2,17 +2,23 @@
 extern crate log;
 
 use failure::{self as f, Error};
-use std::borrow::Cow;
-use std::io::{self, Write};
-use std::net::SocketAddr;
-use std::path::Path;
-use std::process;
-use std::thread;
-use std::time::Duration;
-
-use libsrt_rs::net::Builder;
-use libsrt_rs::net::Connect;
-use libsrt_rs::net::{EventKind, Events, Poll, Token};
+use std::{
+    borrow::Cow,
+    io::{self, Write},
+    net::SocketAddr,
+    path::Path,
+    process,
+    thread,
+    time::Duration,
+};
+use libsrt_rs::net::{
+    Builder,
+    Connect,
+    EventKind,
+    Events,
+    Poll,
+    Token,
+};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

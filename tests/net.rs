@@ -1,11 +1,14 @@
-use std::io::{self, Read, Write};
-use std::str;
-use std::time::Duration;
-use std::thread;
-
-use libsrt_rs::net::Builder;
-use libsrt_rs::net::{Bind, Stream};
-use libsrt_rs::net::{Poll, Token, Events, EventKind};
+use std::{
+    io::{self, Read, Write},
+    str,
+    time::Duration,
+    thread,
+};
+use libsrt_rs::net::{
+    Builder,
+    Bind, Stream,
+    Poll, Token, Events, EventKind,
+};
 
 static MESSAGE: &str = "foo bar baz";
 

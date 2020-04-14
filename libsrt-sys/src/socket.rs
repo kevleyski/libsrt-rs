@@ -1,8 +1,9 @@
-use std::ffi::CStr;
-use std::io::{self, IoSlice, IoSliceMut};
-use std::mem;
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
-
+use std::{
+    ffi::CStr,
+    io::{self, IoSlice, IoSliceMut},
+    mem,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+};
 use libc::{
     self as c, c_char, c_int as int, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
     socklen_t,

@@ -1,20 +1,28 @@
 #[macro_use]
 extern crate log;
 
-use std::borrow::Cow;
-use std::io::{self, Read};
-use std::net::SocketAddr;
-use std::path::Path;
-use std::process;
-use std::str;
-
-use bytes::{BytesMut, BufMut};
+use std::{
+    borrow::Cow,
+    io::{self, Read},
+    net::SocketAddr,
+    path::Path,
+    process,
+    str,
+};
+use bytes::{BufMut, BytesMut};
 use failure::{self as f, Error};
 use slab::Slab;
-
-use libsrt_rs::net::Builder;
-use libsrt_rs::net::{Bind, Connect, Listener, Stream};
-use libsrt_rs::net::{EventKind, Events, Poll, Token};
+use libsrt_rs::net::{
+    Builder,
+    Bind,
+    Connect,
+    EventKind,
+    Events,
+    Listener,
+    Stream,
+    Poll,
+    Token,
+};
 
 const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 

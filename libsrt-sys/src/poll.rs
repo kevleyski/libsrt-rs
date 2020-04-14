@@ -1,14 +1,15 @@
-use std::cmp;
-use std::collections::{HashMap, HashSet};
-use std::ffi::CStr;
-use std::fmt;
-use std::io;
-use std::iter::FromIterator;
-use std::ops;
-use std::ptr;
-use std::sync::RwLock;
-use std::time::Duration;
-
+use std::{
+    cmp,
+    collections::{HashMap, HashSet},
+    ffi::CStr,
+    fmt,
+    io,
+    iter::FromIterator,
+    ops,
+    ptr,
+    sync::RwLock,
+    time::Duration,
+};
 use crate::error as err;
 use crate::ffi::{self, int, SRTSOCKET};
 use crate::socket::Socket;

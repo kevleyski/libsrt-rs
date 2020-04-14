@@ -1,7 +1,9 @@
-use std::fmt;
-use std::io::{self, IoSlice, IoSliceMut, Read, Write};
-use std::net::SocketAddr;
-use std::time::Duration;
+use std::{
+    fmt,
+    io::{self, IoSlice, IoSliceMut, Read, Write},
+    net::SocketAddr,
+    time::Duration,
+};
 
 pub use libsrt_sys::int;
 use libsrt_sys::{self as sys, Socket};
@@ -111,6 +113,12 @@ pub struct Stream {
 }
 
 impl AsSocket for Stream {
+    fn as_socket(&self) -> &Socket {
+        &self.sock
+    }
+}
+
+impl AsSocket for &Stream {
     fn as_socket(&self) -> &Socket {
         &self.sock
     }
