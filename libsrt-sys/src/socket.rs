@@ -101,6 +101,33 @@ impl Socket {
         Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
     }
 
+    pub fn set_sender(&self, sender: bool) -> io::Result<()> {
+        let mut sender = sender as int;
+        err::cvt(unsafe {
+            ffi::srt_setsockflag(
+                self.0,
+                ffi::SRT_SOCKOPT::SRTO_SENDER,
+                &mut sender as *mut _ as *mut _,
+                mem::size_of::<int>() as int,
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn set_tsbpd_mode(&self, tsbpd_mode: bool) -> io::Result<()> {
+        let mut tsbpd_mode = tsbpd_mode as int;
+        err::cvt(unsafe {
+            ffi::srt_setsockopt(
+                self.0,
+                0,
+                ffi::SRT_SOCKOPT::SRTO_TSBPDMODE,
+                &mut tsbpd_mode as *mut _ as *mut _,
+                mem::size_of::<int>() as int,
+            )
+        })?;
+        Ok(())
+    }
+
     pub fn set_recv_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
         let mut blocking = (!nonblocking) as int;
         err::cvt(unsafe {
@@ -129,8 +156,22 @@ impl Socket {
         Ok(())
     }
 
-    pub fn getsockstate(&self) -> io::Result<ffi::SRT_SOCKSTATUS> {
-        Ok(unsafe { ffi::srt_getsockstate(self.0) })
+    pub fn is_broken(&self) -> io::Result<bool> {
+        Ok(unsafe {
+            ffi::srt_getsockstate(self.0) == ffi::SRT_SOCKSTATUS::SRTS_BROKEN
+        })
+    }
+
+    pub fn is_closing(&self) -> io::Result<bool> {
+        Ok(unsafe {
+            ffi::srt_getsockstate(self.0) == ffi::SRT_SOCKSTATUS::SRTS_CLOSING
+        })
+    }
+
+    pub fn is_closed(&self) -> io::Result<bool> {
+        Ok(unsafe {
+            ffi::srt_getsockstate(self.0) == ffi::SRT_SOCKSTATUS::SRTS_CLOSED
+        })
     }
 
     pub fn take_error(&self) -> io::Result<Option<io::Error>> {
@@ -238,7 +279,7 @@ mod socket_tests {
     use super::*;
 
     #[test]
-    fn test_sockaddr() {
+    fn into_from_sockaddr() {
         let addr = "192.168.128.64:12345".parse().unwrap();
         let (addrp, len) = into_sockaddr(&addr);
         let result = unsafe {

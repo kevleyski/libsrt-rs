@@ -14,6 +14,7 @@ pub type UDPSOCKET = SYSSOCKET;
 // This is a duplicate enum. Must be kept in sync with the original UDT enum for
 // backward compatibility until all compat is destroyed.
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SRT_SOCKOPT {
     SRTO_MSS = 0,        // the Maximum Transfer Unit
     SRTO_SNDSYN = 1,     // if sending is blocking
@@ -73,6 +74,7 @@ pub enum SRT_SOCKOPT {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SRT_TRANSTYPE {
     SRTT_LIVE,
     SRTT_FILE,
@@ -95,8 +97,16 @@ extern "C" {
     pub fn srt_bind(u: SRTSOCKET, name: *const sockaddr, namelen: int) -> int;
     pub fn srt_bind_peerof(u: SRTSOCKET, udpsock: UDPSOCKET) -> int;
     pub fn srt_listen(u: SRTSOCKET, backlog: int) -> int;
-    pub fn srt_accept(u: SRTSOCKET, addr: *mut sockaddr, addrlen: *mut int) -> SRTSOCKET;
-    pub fn srt_connect(u: SRTSOCKET, name: *const sockaddr, namelen: int) -> int;
+    pub fn srt_accept(
+        u: SRTSOCKET,
+        addr: *mut sockaddr,
+        addrlen: *mut int
+    ) -> SRTSOCKET;
+    pub fn srt_connect(
+        u: SRTSOCKET,
+        name: *const sockaddr,
+        namelen: int
+    ) -> int;
     pub fn srt_connect_debug(
         u: SRTSOCKET,
         name: *const sockaddr,
@@ -111,19 +121,27 @@ extern "C" {
         remote_namelen: int,
     ) -> int;
     pub fn srt_close(u: SRTSOCKET) -> int;
-    pub fn srt_getpeername(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut int) -> int;
-    pub fn srt_getsockname(u: SRTSOCKET, name: *mut sockaddr, namelen: *mut int) -> int;
+    pub fn srt_getpeername(
+        u: SRTSOCKET,
+        name: *mut sockaddr,
+        namelen: *mut int
+    ) -> int;
+    pub fn srt_getsockname(
+        u: SRTSOCKET,
+        name: *mut sockaddr,
+        namelen: *mut int
+    ) -> int;
     pub fn srt_getsockopt(
         u: SRTSOCKET,
-        level: int,
-        /*ignored*/ optname: SRT_SOCKOPT,
+        level: int, /*ignored*/
+        optname: SRT_SOCKOPT,
         optval: *mut c_void,
         optlen: *mut int,
     ) -> int;
     pub fn srt_setsockopt(
         u: SRTSOCKET,
-        level: int,
-        /*ignored*/ optname: SRT_SOCKOPT,
+        level: int, /*ignored*/
+        optname: SRT_SOCKOPT,
         optval: *const c_void,
         optlen: int,
     ) -> int;
@@ -160,6 +178,58 @@ extern "C" {
     pub static srt_msgctrl_default: SRT_MSGCTRL;
 }
 
+// enum CodeMajor
+pub const MJ_UNKNOWN   : int = -1;
+pub const MJ_SUCCESS   : int =  0;
+pub const MJ_SETUP     : int =  1;
+pub const MJ_CONNECTION: int =  2;
+pub const MJ_SYSTEMRES : int =  3;
+pub const MJ_FILESYSTEM: int =  4;
+pub const MJ_NOTSUP    : int =  5;
+pub const MJ_AGAIN     : int =  6;
+pub const MJ_PEERERROR : int =  7;
+
+// enum CodeMinor
+// MJ_SETUP
+pub const MN_NONE           : int =  0;
+pub const MN_TIMEOUT        : int =  1;
+pub const MN_REJECTED       : int =  2;
+pub const MN_NORES          : int =  3;
+pub const MN_SECURITY       : int =  4;
+// MJ_CONNECTION
+pub const MN_CONNLOST       : int =  1;
+pub const MN_NOCONN         : int =  2;
+// MJ_SYSTEMRES
+pub const MN_THREAD         : int =  1;
+pub const MN_MEMORY         : int =  2;
+// MJ_FILESYSTEM
+pub const MN_SEEKGFAIL      : int =  1;
+pub const MN_READFAIL       : int =  2;
+pub const MN_SEEKPFAIL      : int =  3;
+pub const MN_WRITEFAIL      : int =  4;
+// MJ_NOTSUP
+pub const MN_ISBOUND        : int =  1;
+pub const MN_ISCONNECTED    : int =  2;
+pub const MN_INVAL          : int =  3;
+pub const MN_SIDINVAL       : int =  4;
+pub const MN_ISUNBOUND      : int =  5;
+pub const MN_NOLISTEN       : int =  6;
+pub const MN_ISRENDEZVOUS   : int =  7;
+pub const MN_ISRENDUNBOUND  : int =  8;
+pub const MN_INVALMSGAPI    : int =  9;
+pub const MN_INVALBUFFERAPI : int = 10;
+pub const MN_BUSY           : int = 11;
+pub const MN_XSIZE          : int = 12;
+pub const MN_EIDINVAL       : int = 13;
+// MJ_AGAIN
+pub const MN_WRAVAIL        : int =  1;
+pub const MN_RDAVAIL        : int =  2;
+pub const MN_XMTIMEOUT      : int =  3;
+pub const MN_CONGESTION     : int =  4;
+
+// enum SRT_ERRNO
+pub const SRT_ETIMEOUT       : int = 6003; // XXX MJ_AGAIN * 1000 + XMTIMEOUT
+
 // The send/receive functions.
 extern "C" {
     pub fn srt_sendmsg(u: SRTSOCKET, buf: *const c_char, len: int) -> int;
@@ -177,33 +247,35 @@ pub fn srt_errorkind(errcode: int) -> std::io::ErrorKind {
     let major = errcode / 1000;
     let minor = errcode % 1000;
     match major {
-        // MJ_SETUP
-        1 => match minor {
-            1 => std::io::ErrorKind::TimedOut,          // MN_TIMEOUT
-            2 => std::io::ErrorKind::ConnectionRefused, // MN_REJECTED
-            _ => std::io::ErrorKind::Other,
+        MJ_SETUP => {
+            match minor {
+                MN_TIMEOUT => std::io::ErrorKind::TimedOut,
+                MN_REJECTED => std::io::ErrorKind::ConnectionRefused,
+                _ => std::io::ErrorKind::Other,
+            }
         },
-        // MJ_CONNECTION
-        2 => match minor {
-            1 => std::io::ErrorKind::BrokenPipe,   // MN_CONNLOST
-            2 => std::io::ErrorKind::NotConnected, // MN_NOCONN
-            _ => std::io::ErrorKind::Other,
+        MJ_CONNECTION => {
+            match minor {
+                MN_CONNLOST => std::io::ErrorKind::BrokenPipe,
+                MN_NOCONN => std::io::ErrorKind::NotConnected,
+                _ => std::io::ErrorKind::Other,
+            }
         },
-        // MJ_SYSTEMRES
-        3 => std::io::ErrorKind::Other,
-        // MJ_FILESYSTEM
-        4 => std::io::ErrorKind::Other,
-        // MJ_NOTSUP
-        5 => match minor {
-            11 => std::io::ErrorKind::AlreadyExists, // MN_BUSY
-            _ => std::io::ErrorKind::Other,
+        MJ_SYSTEMRES => std::io::ErrorKind::Other,
+        MJ_FILESYSTEM => std::io::ErrorKind::Other,
+        MJ_NOTSUP => {
+            match minor {
+                MN_BUSY => std::io::ErrorKind::AlreadyExists,
+                _ => std::io::ErrorKind::Other,
+            }
         },
-        // MJ_AGAIN
-        6 => match minor {
-            1 => std::io::ErrorKind::WouldBlock,
-            2 => std::io::ErrorKind::WouldBlock,
-            3 => std::io::ErrorKind::TimedOut,
-            _ => std::io::ErrorKind::WouldBlock, // XXX
+        MJ_AGAIN => {
+            match minor {
+                MN_WRAVAIL => std::io::ErrorKind::WouldBlock,
+                MN_RDAVAIL => std::io::ErrorKind::WouldBlock,
+                MN_XMTIMEOUT => std::io::ErrorKind::TimedOut,
+                _ => std::io::ErrorKind::WouldBlock, // XXX
+            }
         },
         _ => std::io::ErrorKind::Other,
     }
@@ -211,6 +283,7 @@ pub fn srt_errorkind(errcode: int) -> std::io::ErrorKind {
 
 // Values returned by srt_getsockstate()
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SRT_SOCKSTATUS {
     SRTS_INIT = 1,
     SRTS_OPENED,
@@ -229,6 +302,7 @@ extern "C" {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SRT_EPOLL_OPT {
     SRT_EPOLL_OPT_NONE = 0x0, // fallback
     SRT_EPOLL_IN = 0x1,
@@ -238,12 +312,28 @@ pub enum SRT_EPOLL_OPT {
 
 extern "C" {
     pub fn srt_epoll_create() -> int;
-    pub fn srt_epoll_add_usock(epid: int, u: SRTSOCKET, events: *const int) -> int;
-    pub fn srt_epoll_add_ssock(epid: int, s: SYSSOCKET, events: *const int) -> int;
+    pub fn srt_epoll_add_usock(
+        epid: int,
+        u: SRTSOCKET,
+        events: *const int
+    ) -> int;
+    pub fn srt_epoll_add_ssock(
+        epid: int,
+        s: SYSSOCKET,
+        events: *const int
+    ) -> int;
     pub fn srt_epoll_remove_usock(epid: int, u: SRTSOCKET) -> int;
     pub fn srt_epoll_remove_ssock(epid: int, s: SYSSOCKET) -> int;
-    pub fn srt_epoll_update_usock(epid: int, u: SRTSOCKET, events: *const int) -> int;
-    pub fn srt_epoll_update_ssock(epid: int, s: SYSSOCKET, events: *const int) -> int;
+    pub fn srt_epoll_update_usock(
+        epid: int,
+        u: SRTSOCKET,
+        events: *const int
+    ) -> int;
+    pub fn srt_epoll_update_ssock(
+        epid: int,
+        s: SYSSOCKET,
+        events: *const int
+    ) -> int;
     pub fn srt_epoll_wait(
         epid: int,
         read_fds: *mut SRTSOCKET,

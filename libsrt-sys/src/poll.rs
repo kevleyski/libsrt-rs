@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 use crate::error as err;
-use crate::ffi::{self, int, SRTSOCKET};
+use crate::ffi::{self, int, SRT_ETIMEOUT, SRTSOCKET};
 use crate::socket::Socket;
 
 pub struct Poll {
@@ -31,17 +31,31 @@ impl Poll {
     }
 
     /// Register the socket on the `Poll` instance.
-    pub fn register(&self, sock: &Socket, token: Token, event: EventKind) -> io::Result<()> {
+    pub fn register(
+        &self,
+        sock: &Socket,
+        token: Token,
+        event: EventKind
+    ) -> io::Result<()> {
         let e = event.0;
-        err::cvt(unsafe { ffi::srt_epoll_add_usock(self.epid, sock.as_raw(), &e) })?;
+        err::cvt(unsafe {
+            ffi::srt_epoll_add_usock(self.epid, sock.as_raw(), &e)
+        })?;
         self.socks.write().unwrap().insert(sock.as_raw(), token);
         Ok(())
     }
 
     /// Re-register the socket with the `Poll` instance.
-    pub fn reregister(&self, sock: &Socket, token: Token, event: EventKind) -> io::Result<()> {
+    pub fn reregister(
+        &self,
+        sock: &Socket,
+        token: Token,
+        event: EventKind
+    ) -> io::Result<()> {
         let e = event.0;
-        err::cvt(unsafe { ffi::srt_epoll_update_usock(self.epid, sock.as_raw(), &e) })?;
+        err::cvt(unsafe {
+            ffi::srt_epoll_update_usock(self.epid, sock.as_raw(), &e)
+        })?;
         self.socks.write().unwrap().insert(sock.as_raw(), token);
         Ok(())
     }
@@ -49,12 +63,19 @@ impl Poll {
     /// Deregister the socket from the `Poll` instance.
     pub fn deregister(&self, sock: &Socket) -> io::Result<()> {
         self.socks.write().unwrap().remove(&(sock.as_raw()));
-        err::cvt(unsafe { ffi::srt_epoll_remove_usock(self.epid, sock.as_raw()) })?;
+        err::cvt(unsafe {
+            ffi::srt_epoll_remove_usock(self.epid, sock.as_raw())
+        })?;
         Ok(())
     }
 
-    /// Block the current thread and wait for an I/O event on the `Poll` instance.
-    pub fn poll(&self, events: &mut Events, timeout: Option<Duration>) -> io::Result<usize> {
+    /// Block the current thread and wait for an I/O event on the `Poll`
+    /// instance.
+    pub fn poll(
+        &self,
+        events: &mut Events,
+        timeout: Option<Duration>
+    ) -> io::Result<usize> {
         let max_socks = self.socks.read().unwrap().len();
         let mut rd_socks: Vec<int> = Vec::with_capacity(max_socks);
         let mut wr_socks: Vec<int> = Vec::with_capacity(max_socks);
@@ -72,7 +93,7 @@ impl Poll {
 
         let mut rd_num = max_socks;
         let mut wr_num = max_socks;
-        let ret = unsafe {
+        let poll_res = unsafe {
             ffi::srt_epoll_wait(
                 self.epid,
                 rd_socks.as_mut_ptr(),
@@ -87,37 +108,43 @@ impl Poll {
             )
         };
 
-        if ret > 0 {
-            if rd_num > 0 {
-                unsafe { rd_socks.set_len(rd_num) };
-            }
-            if wr_num > 0 {
-                unsafe { wr_socks.set_len(wr_num) };
-            }
-        } else if ret == 0 {
+        if poll_res == 0 {
             unsafe {
                 rd_socks.set_len(0);
                 wr_socks.set_len(0);
             }
-        } else {
+            return Ok(0);
+        } else if poll_res < 0 {
             let mut errno: int = 0;
             let errcode = unsafe { ffi::srt_getlasterror(&mut errno) };
-            if errcode == 6003 {
-                // XXX SRT_ETIMEOUT (MJ_AGAIN, XMTIMEOUT)
+            if errcode == SRT_ETIMEOUT {
                 unsafe {
                     rd_socks.set_len(0);
                     wr_socks.set_len(0);
                 }
+                return Ok(0);
             } else {
                 let errstr =
-                    unsafe { CStr::from_ptr(ffi::srt_strerror(errcode, errno)).to_string_lossy() };
+                    unsafe {
+                        CStr::from_ptr(ffi::srt_strerror(errcode, errno))
+                            .to_string_lossy()
+                    };
                 let err = err::Error::new(errcode, errstr);
                 return Err(io::Error::new(err.kind(), err));
             }
         }
 
-        let mut new_evts = Events::with_capacity(cmp::max(rd_socks.len(), wr_socks.len()));
-        let mut wr_socks_set = HashSet::<SRTSOCKET>::from_iter(wr_socks.to_vec());
+        if rd_num > 0 {
+            unsafe { rd_socks.set_len(rd_num) };
+        }
+        if wr_num > 0 {
+            unsafe { wr_socks.set_len(wr_num) };
+        }
+
+        let mut new_evts
+            = Events::with_capacity(cmp::max(rd_socks.len(), wr_socks.len()));
+        let mut wr_socks_set
+            = HashSet::<SRTSOCKET>::from_iter(wr_socks.to_vec());
         for sock in rd_socks {
             if sock == ffi::SRT_INVALID_SOCK {
                 continue;
@@ -169,11 +196,11 @@ impl Poll {
             }
         }
 
-        let ret = new_evts.len();
+        let evts_len = new_evts.len();
 
         events.append(&mut new_evts);
 
-        Ok(ret)
+        Ok(evts_len)
     }
 }
 
