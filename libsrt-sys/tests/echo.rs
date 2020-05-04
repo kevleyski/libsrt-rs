@@ -6,7 +6,7 @@ use std::{
     thread,
 };
 
-static MESSAGE: &str = "hello srt";
+static MESSAGE: &str = "hello libsrt-sys";
 
 #[test]
 fn sync_echo() {
@@ -27,7 +27,7 @@ fn sync_echo() {
 
         let mut buf = [0; 2048];
         let nread = peer_sock.recv(&mut buf).unwrap();
-        assert_eq!(nread, 9);
+        assert_eq!(nread, 16);
         assert_eq!(MESSAGE, str::from_utf8(&buf[0..nread]).unwrap());
 
         peer_sock.send(&buf[0..nread]).unwrap();
@@ -39,7 +39,7 @@ fn sync_echo() {
 
     let mut buf = [0; 2048];
     let nread = client_sock.recv(&mut buf).unwrap();
-    assert_eq!(nread, 9);
+    assert_eq!(nread, 16);
     assert_eq!(MESSAGE, str::from_utf8(&buf[0..nread]).unwrap());
 
     server_thread.join().unwrap();
@@ -140,7 +140,7 @@ fn async_echo() {
             }
         }
 
-        assert_eq!(nread, 9);
+        assert_eq!(nread, 16);
         assert_eq!(MESSAGE, str::from_utf8(&buf[0..nread]).unwrap());
     });
 
@@ -198,7 +198,7 @@ fn async_echo() {
         }
     }
 
-    assert_eq!(nread, 9);
+    assert_eq!(nread, 16);
     assert_eq!(MESSAGE, str::from_utf8(&read_buf[0..nread]).unwrap());
 
     server_thread.join().unwrap();
