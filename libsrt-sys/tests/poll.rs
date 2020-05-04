@@ -22,8 +22,8 @@ fn wait_empty_call() {
     let poll = Poll::new().unwrap();
 
     const TOKEN: Token = Token(0);
-    let event_kind = EventKind::writable() | EventKind::error();
-    poll.register(&sock, TOKEN, event_kind).unwrap();
+    poll.register(&sock, TOKEN,
+                  EventKind::writable() | EventKind::error()).unwrap();
 
     let mut events = Events::with_capacity(2);
     let n = poll.poll(&mut events, Some(Duration::from_millis(1))).unwrap();
@@ -42,8 +42,8 @@ fn wait_all_sockets_in_poll_released() {
     let poll = Poll::new().unwrap();
 
     const TOKEN: Token = Token(0);
-    let event_kind = EventKind::writable() | EventKind::error();
-    poll.register(&sock, TOKEN, event_kind).unwrap();
+    poll.register(&sock, TOKEN,
+                  EventKind::writable() | EventKind::error()).unwrap();
     poll.deregister(&sock).unwrap();
 
     let mut events = Events::with_capacity(2);
@@ -53,7 +53,23 @@ fn wait_all_sockets_in_poll_released() {
 
 #[test]
 fn notify_connection_break() {
-    let addr = "127.0.0.1:5555".parse().unwrap();
+    let try_addr = "127.0.0.1:0".parse().unwrap();
+
+    // prepare server
+    let server_sock = Socket::new(&try_addr).unwrap();
+    server_sock.set_recv_nonblocking(true).unwrap();
+    server_sock.set_send_nonblocking(true).unwrap();
+
+    let server_poll = Poll::new().unwrap();
+
+    const SERVER_TOKEN: Token = Token(0);
+    server_poll.register(&server_sock, SERVER_TOKEN,
+                         EventKind::readable() | EventKind::error()).unwrap();
+
+    server_sock.bind(&try_addr).unwrap();
+    server_sock.listen(1).unwrap();
+
+    let addr = server_sock.socket_addr().unwrap();
 
     // prepare client
     let client_sock = Socket::new(&addr).unwrap();
@@ -62,23 +78,9 @@ fn notify_connection_break() {
 
     let client_poll = Poll::new().unwrap();
 
-    const CLIENT_TOKEN: Token = Token(0);
-    let event_kind = EventKind::writable() | EventKind::error();
-    client_poll.register(&client_sock, CLIENT_TOKEN, event_kind).unwrap();
-
-    // prepare server
-    let server_sock = Socket::new(&addr).unwrap();
-    client_sock.set_recv_nonblocking(true).unwrap();
-    client_sock.set_send_nonblocking(true).unwrap();
-
-    let server_poll = Poll::new().unwrap();
-
-    const SERVER_TOKEN: Token = Token(1);
-    let event_kind = EventKind::readable() | EventKind::error();
-    server_poll.register(&server_sock, SERVER_TOKEN, event_kind).unwrap();
-
-    server_sock.bind(&addr).unwrap();
-    server_sock.listen(1).unwrap();
+    const CLIENT_TOKEN: Token = Token(1);
+    client_poll.register(&client_sock, CLIENT_TOKEN,
+                         EventKind::writable() | EventKind::error()).unwrap();
 
     let connect_thread = thread::spawn(move || {
         client_sock.connect(&addr).unwrap();
@@ -98,8 +100,8 @@ fn notify_connection_break() {
 
     let conn_poll = Poll::new().unwrap();
     const CONN_TOKEN: Token = Token(3);
-    let event_kind = EventKind::readable() | EventKind::error();
-    conn_poll.register(&conn_sock, CONN_TOKEN, event_kind).unwrap();
+    conn_poll.register(&conn_sock, CONN_TOKEN,
+                       EventKind::readable() | EventKind::error()).unwrap();
 
     let client_sock = connect_thread.join().unwrap();
 
