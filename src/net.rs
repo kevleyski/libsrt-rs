@@ -5,9 +5,12 @@ use std::{
     time::Duration,
 };
 
-pub use libsrt_sys::int;
-use libsrt_sys::{self as sys, Socket};
-pub use libsrt_sys::{EventKind, Events, Token};
+use libsrt_sys::{self as sys, Socket, LIVE_DEF_PLSIZE};
+pub use libsrt_sys::{
+    int,
+    TRANSTYPE,
+    EventKind, Events, Token
+};
 
 pub trait AsSocket {
     /// Returns the internal socket.
@@ -39,12 +42,16 @@ pub trait Connect: Bind {
 /// Builder struct for a SRT instance
 pub struct Builder {
     nonblocking: bool,
+    payload_size: usize,
+    trans_type: TRANSTYPE,
 }
 
 impl Builder {
     pub fn new() -> Self {
         Builder {
             nonblocking: false,
+            trans_type: TRANSTYPE::SRTT_LIVE,
+            payload_size: LIVE_DEF_PLSIZE,
         }
     }
 
@@ -54,11 +61,26 @@ impl Builder {
         self
     }
 
+    /// Maximum payload size sent in one UDP packet (0 if unlimited)
+    pub fn payload_size(mut self, payload_size: usize) -> Self {
+        self.payload_size = payload_size;
+        self
+    }
+
+    /// Transmission type (set of options required for given transmission type)
+    pub fn trans_type(mut self, trans_type: TRANSTYPE) -> Self {
+        self.trans_type = trans_type;
+        self
+    }
+
     /// Opens a SRT connection to a remote host.
     pub fn connect(&self, addr: &SocketAddr) -> io::Result<Stream> {
         sys::init();
 
         let sock = Socket::new(addr)?;
+
+        sock.set_trans_type(self.trans_type)?;
+        sock.set_payload_size(self.payload_size)?;
 
         if self.nonblocking {
             sock.set_send_nonblocking(true)?;
@@ -84,6 +106,8 @@ impl Builder {
         sock.bind(addr)?;
         sock.listen(128)?;
 
+        sock.set_trans_type(self.trans_type)?;
+        sock.set_payload_size(self.payload_size)?;
         if self.nonblocking {
             sock.set_recv_nonblocking(true)?;
         }
@@ -210,6 +234,12 @@ impl Listener {
 }
 
 impl AsSocket for Listener {
+    fn as_socket(&self) -> &Socket {
+        &self.sock
+    }
+}
+
+impl AsSocket for &Listener {
     fn as_socket(&self) -> &Socket {
         &self.sock
     }

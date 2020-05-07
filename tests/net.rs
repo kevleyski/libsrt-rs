@@ -6,7 +6,7 @@ use std::{
 };
 use libsrt_rs::net::{
     Builder,
-    Bind, Stream,
+    Bind,
     Poll, Token, Events, EventKind,
 };
 

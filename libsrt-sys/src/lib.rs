@@ -22,4 +22,9 @@ pub fn init() {
 
 pub use libc::c_int as int;
 pub use poll::{Event, EventKind, Events, Poll, Token};
-pub use socket::{Socket, SRT_SOCKSTATUS as SOCKSTATUS};
+pub use socket::{
+    Socket,
+    SRT_SOCKSTATUS as SOCKSTATUS,
+    SRT_TRANSTYPE as TRANSTYPE,
+    SRT_LIVE_DEF_PLSIZE as LIVE_DEF_PLSIZE,
+};

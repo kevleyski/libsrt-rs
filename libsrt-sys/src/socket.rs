@@ -10,8 +10,10 @@ use libc::{
 };
 
 use crate::error as err;
-pub use crate::ffi::SRT_SOCKSTATUS;
+pub use crate::ffi::{SRT_SOCKSTATUS, SRT_TRANSTYPE};
 use crate::ffi::{self, SRTSOCKET};
+
+pub const SRT_LIVE_DEF_PLSIZE: usize = 1316; // = 188*7, recommended for MPEG TS
 
 #[derive(Debug)]
 pub struct Socket(SRTSOCKET);
@@ -101,6 +103,34 @@ impl Socket {
         Err(io::Error::new(io::ErrorKind::Other, "not implemented"))
     }
 
+    pub fn set_recv_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        let mut blocking = (!nonblocking) as int;
+        err::cvt(unsafe {
+            ffi::srt_setsockopt(
+                self.0,
+                0,
+                ffi::SRT_SOCKOPT::SRTO_RCVSYN,
+                &mut blocking as *mut _ as *mut _,
+                mem::size_of::<int>() as int,
+            )
+        })?;
+        Ok(())
+    }
+
+    pub fn set_send_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
+        let mut blocking = (!nonblocking) as int;
+        err::cvt(unsafe {
+            ffi::srt_setsockopt(
+                self.0,
+                0,
+                ffi::SRT_SOCKOPT::SRTO_SNDSYN,
+                &mut blocking as *mut _ as *mut _,
+                mem::size_of::<int>() as int,
+            )
+        })?;
+        Ok(())
+    }
+
     pub fn set_sender(&self, sender: bool) -> io::Result<()> {
         let mut sender = sender as int;
         err::cvt(unsafe {
@@ -128,28 +158,28 @@ impl Socket {
         Ok(())
     }
 
-    pub fn set_recv_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (!nonblocking) as int;
+    pub fn set_payload_size(&self, payload_size: usize) -> io::Result<()> {
+        let mut payload_size = payload_size as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
-                ffi::SRT_SOCKOPT::SRTO_RCVSYN,
-                &mut blocking as *mut _ as *mut _,
+                ffi::SRT_SOCKOPT::SRTO_PAYLOADSIZE,
+                &mut payload_size as *mut _ as *mut _,
                 mem::size_of::<int>() as int,
             )
         })?;
         Ok(())
     }
 
-    pub fn set_send_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        let mut blocking = (!nonblocking) as int;
+    pub fn set_trans_type(&self, trans_type: SRT_TRANSTYPE) -> io::Result<()> {
+        let mut trans_type = trans_type as int;
         err::cvt(unsafe {
             ffi::srt_setsockopt(
                 self.0,
                 0,
-                ffi::SRT_SOCKOPT::SRTO_SNDSYN,
-                &mut blocking as *mut _ as *mut _,
+                ffi::SRT_SOCKOPT::SRTO_TRANSTYPE,
+                &mut trans_type as *mut _ as *mut _,
                 mem::size_of::<int>() as int,
             )
         })?;

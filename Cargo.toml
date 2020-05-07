@@ -15,14 +15,24 @@ edition = "2018"
 libsrt-sys = { path = "libsrt-sys", version = "0.2.0" }
 log = "0.4"
 
+# stream
+futures = { version = "0.3", optional = true }
+bytes = { version = "0.5", optional = true }
+slab = { version = "0.4", optional = true }
+
 [dev-dependencies]
 failure = { version = "0.1", default-features = false, features=["std"] }
 env_logger = { version = "0.4", default-features = false }
 slab = "0.4"
 bytes = "0.5"
+async-std = "1"
 
 [workspace]
 members = [
     ".",
     "libsrt-sys",
 ]
+
+[features]
+default = ["stream"]
+stream = ["futures", "bytes", "slab"]
