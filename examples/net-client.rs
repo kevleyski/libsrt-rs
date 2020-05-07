@@ -21,6 +21,8 @@ use libsrt_rs::net::{
 };
 
 fn main() {
+    let _ = env_logger::init();
+
     let args: Vec<String> = std::env::args().collect();
     let opts = match get_opts(&args) {
         Ok(res) => res,

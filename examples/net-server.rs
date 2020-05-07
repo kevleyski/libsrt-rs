@@ -29,6 +29,8 @@ const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 const MAX_CONNECTIONS: usize = 1024;
 
 fn main() {
+    let _ = env_logger::init();
+
     let args: Vec<String> = std::env::args().collect();
     let opts = match get_opts(&args) {
         Ok(res) => res,

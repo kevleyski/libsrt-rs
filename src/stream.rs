@@ -11,13 +11,14 @@ use std::{
     sync::{
         self,
         Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
     task::{
         self,
         Context,
     },
     thread,
+    time::Duration,
 };
 use crate::net::{
     self,
@@ -58,7 +59,6 @@ struct Receiver<T> {
 }
 
 struct Channel {
-    ready: AtomicBool,
     tx: Stream,
     rx: Stream,
 }
@@ -83,7 +83,8 @@ impl Builder {
             .payload_size(MSG_PLSIZE)
             .nonblocking(true)
             .bind(&addr)?;
-        poll.register(&listener, LISTEN_TOKEN, EventKind::readable())?;
+        poll.register(&listener, LISTEN_TOKEN,
+                      EventKind::readable() | EventKind::error())?;
         let addr = listener.local_addr()?;
 
         let conn1 = net::Builder::new()
@@ -91,19 +92,26 @@ impl Builder {
             .payload_size(MSG_PLSIZE)
             .nonblocking(true)
             .connect(&addr)?;
-        poll.register(&conn1, CONN1_TOKEN, EventKind::writable())?;
+        poll.register(&conn1, CONN1_TOKEN,
+                      EventKind::writable() | EventKind::error())?;
 
         // XXX infinite waiting
         let mut accepted = None;
         let mut connected = false;
         let conn2 = loop {
             events.clear();
-            poll.poll(&mut events, None)?;
+            poll.poll(&mut events, Some(Duration::from_millis(500)))?; // XXX
             for event in &events {
                 match event.token() {
-                    LISTEN_TOKEN => accepted = Some(listener.accept()?.0),
-                    CONN1_TOKEN => connected = true,
-                    _ => {}
+                    LISTEN_TOKEN => {
+                        trace!("channel accepted");
+                        accepted = Some(listener.accept()?.0);
+                    },
+                    CONN1_TOKEN => {
+                        trace!("channel connected");
+                        connected = true;
+                    },
+                    _ => unreachable!()
                 }
             }
 
@@ -115,7 +123,6 @@ impl Builder {
         drop(listener);
 
         let inner = Arc::new(Channel {
-            ready: AtomicBool::new(false),
             tx: conn1,
             rx: conn2,
         });
@@ -176,22 +183,20 @@ fn enqueue(
     tasks: &mut Slab<Task>,
     done: &mut bool
 ) {
-    if !rx.drain() {
-        trace!("no messages available");
-        return
-    }
+    rx.drain();
     trace!("looking for some messages");
     while let Some(msg) = rx.recv() {
         match msg {
             Message::Done => {
-                debug!("done");
+                trace!("done");
                 *done = true;
             }
             Message::Connecting(addr, complete) => {
+                trace!("connecting to {}", addr);
+                // XXX check (tasks.len() == tasks.capacity())
                 let stream = net::Builder::new()
                     .nonblocking(true)
                     .connect(&addr).unwrap(); // XXX
-                // XXX check (tasks.len() == tasks.capacity())
                 let task = Task::Connecting(stream, complete);
                 let index = tasks.insert(task);
                 match tasks.get(index).unwrap() { // XXX
@@ -199,10 +204,12 @@ fn enqueue(
                         poll.register(&stream, Token(index),
                                       EventKind::writable()).unwrap(); // XXX
                     }
-                    _ => {}
+                    _ => unreachable!()
                 }
             }
             Message::Listening(listener, accept) => {
+                trace!("listening to {}", listener.local_addr().unwrap());
+                // XXX check (tasks.len() == tasks.capacity())
                 let task = Task::Listening(listener, accept);
                 let index = tasks.insert(task);
                 match tasks.get(index).unwrap() { // XXX
@@ -210,8 +217,28 @@ fn enqueue(
                         poll.register(&listener, Token(index),
                                       EventKind::readable()).unwrap(); // XXX
                     }
-                    _ => {}
+                    _ => unreachable!()
                 }
+            }
+        }
+    }
+}
+
+fn accept(listener: &Listener, incoming: &mut channel::mpsc::Sender<Stream>) {
+    loop {
+        match listener.accept() {
+            Ok((stream, peer_addr)) => {
+                let stream = net::Builder::new()
+                    .nonblocking(true)
+                    .accept(stream).unwrap();
+                trace!("connection established from {}", peer_addr);
+                let _t = incoming.try_send(stream); // XXX
+            }
+            Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                break;
+            }
+            Err(_e) => {
+                break; // XXX
             }
         }
     }
@@ -225,57 +252,49 @@ fn run(_tx: Sender<Message>, rx: Receiver<Message>) {
 
     let msg_index = tasks.insert(Task::Message());
     poll.register(&rx.inner.rx, Token(msg_index),
-                  EventKind::readable()).unwrap(); // XXX
+                  EventKind::readable() | EventKind::error()).unwrap(); // XXX
 
     loop {
         trace!("turn of the loop");
-        if !rx_done {
-            enqueue(&rx, &poll, &mut tasks, &mut rx_done);
-        }
         if rx_done && tasks.len() == 0 {
             break
         }
 
         events.clear();
         // Wait for events
-        poll.poll(&mut events, None).expect("srt poll error");
+        poll.poll(&mut events, Some(Duration::from_millis(1000))) // XXX
+            .expect("srt poll error");
         for event in &events {
             match event.token() {
                 Token(index) => {
-                    let _kind = event.kind();
+                    let kind = event.kind();
 
                     let task = tasks.get_mut(index).unwrap(); // XXX
                     match task {
                         Task::Message() => {
                             // Do nothing
+                            assert_eq!(index, msg_index);
+                            if kind.is_readable() {
+                                trace!("got a message");
+                                enqueue(&rx, &poll, &mut tasks, &mut rx_done);
+                            } else if kind.is_error() {
+                                trace!("got an error");
+                                poll.deregister(&rx.inner.rx).unwrap();
+                            }
                         }
                         Task::Connecting(stream, _complete) => {
                             poll.deregister(stream).unwrap();
                             let t = tasks.remove(index);
                             match t {
                                 Task::Connecting(stream, complete) => {
-                                    let _t = complete.send(stream); // XXX
+                                    drop(complete.send(stream));
+                                    trace!("connection complete");
                                 }
-                                _ => {}
+                                _ => unreachable!()
                             }
                         }
-                        Task::Listening(listener, accept) => {
-                            loop {
-                                match listener.accept() {
-                                    Ok((stream, _peer_addr)) => {
-                                        let stream = net::Builder::new()
-                                            .nonblocking(true)
-                                            .accept(stream).unwrap();
-                                        let _t = accept.try_send(stream); // XXX
-                                    }
-                                    Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-                                        break;
-                                    }
-                                    Err(_e) => {
-                                        break; // XXX
-                                    }
-                                }
-                            }
+                        Task::Listening(ref listener, ref mut incoming) => {
+                            accept(listener, incoming);
                         }
                     }
                 }
@@ -306,10 +325,7 @@ impl<T> Receiver<T> {
     }
 
     /// Returns whether there are messages to look at
-    fn drain(&self) -> bool {
-        if !self.inner.ready.swap(false, Ordering::SeqCst) {
-            return false
-        }
+    fn drain(&self) {
         loop {
             match (&self.inner.rx).read(&mut [0; MSG_PLSIZE]) {
                 Ok(_) => {}
@@ -317,15 +333,12 @@ impl<T> Receiver<T> {
                 Err(e) => panic!("I/O error: {}", e),
             }
         }
-        return true
     }
 }
 
 impl Channel {
     fn notify(&self) {
-        if !self.ready.swap(true, Ordering::SeqCst) {
-            drop((&self.tx).write(&[1]));
-        }
+        drop((&self.tx).write(&[1]));
     }
 }
 
