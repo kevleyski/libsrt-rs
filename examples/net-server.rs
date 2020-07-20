@@ -69,8 +69,6 @@ struct Connection {
 }
 
 fn run(addr: impl Into<SocketAddr> + 'static) -> Result<(), Error> {
-    env_logger::init()?;
-
     const LISTEN_TOKEN: Token = Token(MAX_CONNECTIONS);
 
     // let addr = args[1].parse()?;

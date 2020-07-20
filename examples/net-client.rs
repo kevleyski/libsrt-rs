@@ -56,8 +56,6 @@ fn prog_name(path: &str) -> Cow<str> {
 }
 
 fn run(addr: impl Into<SocketAddr> + 'static) -> Result<(), Error> {
-    env_logger::init()?;
-
     const TOKEN: Token = Token(0);
 
     let poll = Poll::new()?;
