@@ -44,6 +44,7 @@ fn main() {
         .build();
 
     println!("cargo:rustc-link-search=native={}/lib", dst.display());
+    println!("cargo:rustc-link-search=native={}/lib64", dst.display());
     println!("cargo:rustc-link-lib=static=srt");
 
     if target.contains("apple") {
